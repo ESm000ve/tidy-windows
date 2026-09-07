@@ -15,6 +15,27 @@ Tidy is a modern, beautifully designed file organizer built with Electron and Re
 
 ---
 
+## Design & Experience
+
+Tidy was designed from the ground up to feel like a **first-class citizen on macOS**. We prioritized a native aesthetic and fluid interactions to ensure that organizing files feels less like a chore and more like magic.
+
+### The Dashboard
+![Tidy Dashboard](./assets/home_dashboard.jpg)
+- **Glassmorphism & Depth:** We leverage translucent materials and subtle drop shadows that adapt beautifully to both light and dark modes, ensuring the app blends perfectly with your desktop environment.
+- **Clear Affordances:** The drag-and-drop zones for Source and Destination are immediately obvious, reducing cognitive load for first-time users.
+
+### Visual Rules Engine
+![Visual Rules Engine](./assets/rules_engine.jpg)
+- **Node-Based Logic:** Instead of overwhelming users with complex boolean dropdowns, the visual node system allows users to intuitively chain conditions (e.g., "If File Type is .pdf" AND "Date is Within 30 days").
+- **Clean Typography:** Using SF Pro and careful whitespace management keeps the interface legible even when rules get complex.
+
+### AI Natural Language Command Bar
+![AI Command Bar](./assets/ai_prompt.jpg)
+- **Invisible Complexity:** For power users, the glowing AI command bar at the bottom provides a frictionless way to create rules ("Type a natural language rule...").
+- **Graceful Feedback:** Success states (like the "Rules updated" toast) are non-blocking and animate smoothly, keeping the user in the flow without requiring disruptive modal dismissals.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
