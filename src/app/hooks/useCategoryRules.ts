@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
-import type { Category } from "../lib/generateScript";
-import { createInitialCategories } from "../constants";
+import type { Category } from "../types";
+import { STORAGE_KEYS, createInitialCategories } from "../constants";
+import { readCategories } from "../lib/savedSettings";
+import { useSavedState } from "./usePersistentState";
 
 /**
  * The category rule list and every operation the UI performs on it.
@@ -10,7 +12,7 @@ import { createInitialCategories } from "../constants";
  * with named wrappers on top.
  */
 export function useCategoryRules() {
-  const [categories, setCategories] = useState<Category[]>(createInitialCategories);
+  const [categories, setCategories] = useSavedState<Category[]>(STORAGE_KEYS.categories, createInitialCategories, readCategories);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   /** Apply a patch to one category by id, leaving the rest untouched. */
@@ -62,7 +64,7 @@ export function useCategoryRules() {
   const reset = useCallback(() => {
     setCategories(createInitialCategories());
     setExpandedIds(new Set());
-  }, []);
+  }, [setCategories]);
 
   const enabledCount = useMemo(
     () => categories.filter((category) => category.enabled).length,

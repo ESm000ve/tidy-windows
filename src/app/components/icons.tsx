@@ -1,135 +1,60 @@
-/**
- * Central icon set.
- *
- * Every icon in the app is an SF Symbol rendered through `SFIcon`. Wrapping each
- * symbol here — rather than re-declaring a local `makeIcon` helper in every
- * component — gives the app one typed surface for icons, one place to swap the
- * underlying icon library, and consistent accessibility defaults.
- *
- * Icons are decorative by default: callers that use an icon as the only content
- * of a control must pass an explicit `aria-label`.
- */
-import type { AriaAttributes, ComponentType } from "react";
-import { SFIcon } from "@bradleyhodges/sfsymbols-react";
-import type { IconDefinition } from "@bradleyhodges/sfsymbols-types";
-import {
-  sfArchiveboxFill,
-  sfArrowCounterclockwise,
-  sfArrowLeftAndRight,
-  sfArrowRight,
-  sfCalendar,
-  sfChartBarFill,
-  sfCheckmark,
-  sfCheckmarkCircle,
-  sfChevronDown,
-  sfChevronLeft,
-  sfChevronRight,
-  sfCircle,
-  sfCircleDashed,
-  sfClock,
-  sfClockFill,
-  sfCommand,
-  sfDisplay,
-  sfDocumentFill,
-  sfDocumentOnDocument,
-  sfExclamationmarkCircle,
-  sfExclamationmarkTriangle,
-  sfEyeFill,
-  sfFigureStand,
-  sfFilmFill,
-  sfFolder,
-  sfFolderFill,
-  sfGearshape,
-  sfInfoCircle,
-  sfLine3Horizontal,
-  sfMagnifyingglass,
-  sfMoon,
-  sfMusicNote,
-  sfMusicNoteList,
-  sfPencil,
-  sfPhoto,
-  sfPhotoFill,
-  sfPlayFill,
-  sfScroll,
-  sfSparkles,
-  sfSquareAndArrowUp,
-  sfSunMax,
-  sfTextDocument,
-  sfXmark,
-} from "@bradleyhodges/sfsymbols";
-
-/** Props accepted by every icon in this module. */
+import type { AriaAttributes, ComponentType, SVGProps } from "react";
+import { Book20Regular, Archive20Regular, ArrowSwap20Regular, ArrowRight20Regular, ChartMultiple20Regular, Checkmark20Regular, CheckmarkCircle20Regular, ChevronDown20Regular, ChevronUp20Regular, ChevronRight20Regular, Circle20Regular, Clock20Regular, Keyboard20Regular, Copy20Regular, Desktop20Regular, Document20Regular, DocumentText20Regular, Eye20Regular, MoviesAndTv20Regular, Filter20Regular, Folder20Regular, Info20Regular, WeatherMoon20Regular, MusicNote220Regular, Edit20Regular, Image20Regular, Play20Regular, ArrowUndo20Regular, ClipboardTextLtr20Regular, Search20Regular, Settings20Regular, Sparkle20Regular, WeatherSunny20Regular, ArrowUpload20Regular, Warning20Regular, ErrorCircle20Regular, Dismiss20Regular, Color20Regular, HandLeft20Regular, Pause20Regular, BrainCircuit20Regular, Speaker220Regular } from "@fluentui/react-icons";
+/** Microsoft Fluent SVG artwork, sized to the Windows 20px icon grid. */
 export interface IconProps {
-  /** Tailwind sizing/colour classes. Icons inherit `currentColor`. */
-  className?: string;
-  /** Set to `true` when the icon is decorative and sits next to a text label. */
-  "aria-hidden"?: AriaAttributes["aria-hidden"];
-  /** Required when the icon is the only content of an interactive control. */
-  "aria-label"?: string;
+    className?: string;
+    "aria-hidden"?: AriaAttributes["aria-hidden"];
+    "aria-label"?: string;
 }
-
-/** A component rendering a single SF Symbol. */
 export type Icon = ComponentType<IconProps>;
-
-function createIcon(symbol: IconDefinition, displayName: string): Icon {
-  function IconComponent({
-    className,
-    "aria-hidden": ariaHidden,
-    "aria-label": ariaLabel,
-  }: IconProps) {
-    return (
-      <SFIcon
-        icon={symbol}
-        className={className}
-        aria-hidden={ariaHidden}
-        aria-label={ariaLabel}
-      />
-    );
-  }
-  IconComponent.displayName = `Icon(${displayName})`;
-  return IconComponent;
+function icon(Source: ComponentType<SVGProps<SVGSVGElement>>, name: string): Icon {
+    const Component = ({ className, "aria-hidden": hidden, "aria-label": label }: IconProps) => <Source className={className} aria-hidden={hidden ?? !label} aria-label={label} role={label ? "img" : undefined} focusable="false"/>;
+    Component.displayName = name;
+    return Component;
 }
-
-export const Archive = createIcon(sfArchiveboxFill, "Archive");
-export const ArrowLeftRight = createIcon(sfArrowLeftAndRight, "ArrowLeftRight");
-export const ArrowRight = createIcon(sfArrowRight, "ArrowRight");
-export const BarChart = createIcon(sfChartBarFill, "BarChart");
-export const Calendar = createIcon(sfCalendar, "Calendar");
-export const Check = createIcon(sfCheckmark, "Check");
-export const CheckCircle = createIcon(sfCheckmarkCircle, "CheckCircle");
-export const ChevronDown = createIcon(sfChevronDown, "ChevronDown");
-export const ChevronLeft = createIcon(sfChevronLeft, "ChevronLeft");
-export const ChevronRight = createIcon(sfChevronRight, "ChevronRight");
-export const Circle = createIcon(sfCircle, "Circle");
-export const CircleDashed = createIcon(sfCircleDashed, "CircleDashed");
-export const Clock = createIcon(sfClock, "Clock");
-export const ClockFill = createIcon(sfClockFill, "ClockFill");
-export const Command = createIcon(sfCommand, "Command");
-export const Copy = createIcon(sfDocumentOnDocument, "Copy");
-export const Display = createIcon(sfDisplay, "Display");
-export const Document = createIcon(sfDocumentFill, "Document");
-export const DocumentText = createIcon(sfTextDocument, "DocumentText");
-export const Eye = createIcon(sfEyeFill, "Eye");
-export const Figure = createIcon(sfFigureStand, "Figure");
-export const Film = createIcon(sfFilmFill, "Film");
-export const Filter = createIcon(sfLine3Horizontal, "Filter");
-export const Folder = createIcon(sfFolder, "Folder");
-export const FolderFill = createIcon(sfFolderFill, "FolderFill");
-export const Info = createIcon(sfInfoCircle, "Info");
-export const Moon = createIcon(sfMoon, "Moon");
-export const Music = createIcon(sfMusicNote, "Music");
-export const MusicList = createIcon(sfMusicNoteList, "MusicList");
-export const Pencil = createIcon(sfPencil, "Pencil");
-export const Photo = createIcon(sfPhoto, "Photo");
-export const PhotoFill = createIcon(sfPhotoFill, "PhotoFill");
-export const Play = createIcon(sfPlayFill, "Play");
-export const Rotate = createIcon(sfArrowCounterclockwise, "Rotate");
-export const Scroll = createIcon(sfScroll, "Scroll");
-export const Search = createIcon(sfMagnifyingglass, "Search");
-export const Settings = createIcon(sfGearshape, "Settings");
-export const Sparkles = createIcon(sfSparkles, "Sparkles");
-export const Sun = createIcon(sfSunMax, "Sun");
-export const Upload = createIcon(sfSquareAndArrowUp, "Upload");
-export const Warning = createIcon(sfExclamationmarkTriangle, "Warning");
-export const WarningCircle = createIcon(sfExclamationmarkCircle, "WarningCircle");
-export const X = createIcon(sfXmark, "X");
+export const Book = icon(Book20Regular, "Book");
+export const Archive = icon(Archive20Regular, "Archive");
+export const ArrowLeftRight = icon(ArrowSwap20Regular, "ArrowLeftRight");
+export const ArrowRight = icon(ArrowRight20Regular, "ArrowRight");
+export const BarChart = icon(ChartMultiple20Regular, "BarChart");
+export const Check = icon(Checkmark20Regular, "Check");
+export const CheckCircle = icon(CheckmarkCircle20Regular, "CheckCircle");
+export const ChevronDown = icon(ChevronDown20Regular, "ChevronDown");
+export const ChevronUp = icon(ChevronUp20Regular, "ChevronUp");
+export const ChevronRight = icon(ChevronRight20Regular, "ChevronRight");
+export const CircleDashed = icon(Circle20Regular, "CircleDashed");
+export const Clock = icon(Clock20Regular, "Clock");
+export const ClockFill = icon(Clock20Regular, "ClockFill");
+export const Command = icon(Keyboard20Regular, "Command");
+export const Copy = icon(Copy20Regular, "Copy");
+export const Display = icon(Desktop20Regular, "Display");
+export const Document = icon(Document20Regular, "Document");
+export const DocumentText = icon(DocumentText20Regular, "DocumentText");
+export const Eye = icon(Eye20Regular, "Eye");
+export const Film = icon(MoviesAndTv20Regular, "Film");
+export const Filter = icon(Filter20Regular, "Filter");
+export const Folder = icon(Folder20Regular, "Folder");
+export const FolderFill = icon(Folder20Regular, "FolderFill");
+export const Info = icon(Info20Regular, "Info");
+export const Moon = icon(WeatherMoon20Regular, "Moon");
+export const Music = icon(MusicNote220Regular, "Music");
+export const MusicList = icon(MusicNote220Regular, "MusicList");
+export const Pencil = icon(Edit20Regular, "Pencil");
+export const Photo = icon(Image20Regular, "Photo");
+export const PhotoFill = icon(Image20Regular, "PhotoFill");
+export const Play = icon(Play20Regular, "Play");
+export const Rotate = icon(ArrowUndo20Regular, "Rotate");
+export const Scroll = icon(ClipboardTextLtr20Regular, "Scroll");
+export const Search = icon(Search20Regular, "Search");
+export const Settings = icon(Settings20Regular, "Settings");
+export const Sparkles = icon(Sparkle20Regular, "Sparkles");
+export const Sun = icon(WeatherSunny20Regular, "Sun");
+export const Upload = icon(ArrowUpload20Regular, "Upload");
+export const Warning = icon(Warning20Regular, "Warning");
+export const WarningCircle = icon(ErrorCircle20Regular, "WarningCircle");
+export const X = icon(Dismiss20Regular, "X");
+export const Palette = icon(Color20Regular, "Palette");
+export const Hand = icon(HandLeft20Regular, "Hand");
+export const Pause = icon(Pause20Regular, "Pause");
+export const Brain = icon(BrainCircuit20Regular, "Brain");
+export const Ear = icon(Speaker220Regular, "Ear");

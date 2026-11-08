@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { SFIcon } from '@bradleyhodges/sfsymbols-react';
-import { sfEye, sfPaintpalette, sfHandRaised, sfPause, sfBrain, sfSunMax, sfEar } from '@bradleyhodges/sfsymbols';
+import { MotionConfig } from "motion/react";
+import { Eye, Palette, Hand, Pause, Brain, Sun, Ear } from "./icons";
 
 // ─── Profile Definitions ──────────────────────────────────────────────────────
 export const PROFILE_IDS = [
@@ -30,58 +30,58 @@ export const PROFILES: ProfileMeta[] = [
         id: "low-vision",
         name: "Low Vision",
         description: "Larger text, thicker borders, increased contrast, enlarged icons",
-        icon: <SFIcon icon={sfEye} />
+        icon: <Eye className="w-5 h-5" />
     },
     {
         id: "color-vision-deuteranopia",
         name: "Deuteranopia",
         description: "Red-green color blindness — swaps to safe palette (most common type)",
-        icon: <SFIcon icon={sfPaintpalette} />,
+        icon: <Palette className="w-5 h-5" />,
         group: "Color Vision",
     },
     {
         id: "color-vision-protanopia",
         name: "Protanopia",
         description: "Red-green color blindness — reduced red sensitivity",
-        icon: <SFIcon icon={sfPaintpalette} />,
+        icon: <Palette className="w-5 h-5" />,
         group: "Color Vision",
     },
     {
         id: "color-vision-tritanopia",
         name: "Tritanopia",
         description: "Blue-yellow color blindness — swaps blue/yellow to safe alternatives",
-        icon: <SFIcon icon={sfPaintpalette} />,
+        icon: <Palette className="w-5 h-5" />,
         group: "Color Vision",
     },
     {
         id: "motor",
         name: "Motor / Dexterity",
         description: "Larger click targets (48px min), increased spacing, wider interactive regions",
-        icon: <SFIcon icon={sfHandRaised} />,
+        icon: <Hand className="w-5 h-5" />,
     },
     {
         id: "reduced-motion",
         name: "Reduced Motion",
         description: "Disables all animations and transitions for vestibular comfort",
-        icon: <SFIcon icon={sfPause} />,
+        icon: <Pause className="w-5 h-5" />,
     },
     {
         id: "cognitive",
         name: "Cognitive / Focus",
         description: "Atkinson Hyperlegible font, reduced density, simplified layout",
-        icon: <SFIcon icon={sfBrain} />,
+        icon: <Brain className="w-5 h-5" />,
     },
     {
         id: "high-contrast",
         name: "High Contrast",
         description: "Maximum border contrast, solid backgrounds, bold text — great for bright environments",
-        icon: <SFIcon icon={sfSunMax} />,
+        icon: <Sun className="w-5 h-5" />,
     },
     {
         id: "screen-reader",
         name: "Screen Reader",
-        description: "Optimized for VoiceOver and NVDA — verbose labels, no decorative content",
-        icon: <SFIcon icon={sfEar} />,
+        description: "Optimized for Narrator and NVDA — verbose labels, no decorative content",
+        icon: <Ear className="w-5 h-5" />,
     },
 ];
 
@@ -213,7 +213,7 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
         <AccessibilityContext.Provider
             value={{ profiles, enableProfile, disableProfile, toggleProfile, hasProfile, resetAll }}
         >
-            {children}
+            <MotionConfig reducedMotion={profiles.has("reduced-motion") ? "always" : "user"}>{children}</MotionConfig>
         </AccessibilityContext.Provider>
     );
 }

@@ -12,9 +12,10 @@ interface Props {
 export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
     const [rule, setRule] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     return (
-        <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <Dialog.Root open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
             <AnimatePresence>
                 {isOpen && (
                     <Dialog.Portal forceMount>
@@ -26,31 +27,31 @@ export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
                                 className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
                             />
                         </Dialog.Overlay>
-                        <Dialog.Content asChild>
+                        <Dialog.Content asChild onEscapeKeyDown={event => { if (isSubmitting) event.preventDefault(); }} onPointerDownOutside={event => { if (isSubmitting) event.preventDefault(); }}>
                             <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 8 }}
+                                transition={{ duration: 0.2, ease: [0, 0, 0, 1] }}
                                 className="fixed left-[50%] top-[50%] z-50 w-full max-w-[480px] -translate-x-1/2 -translate-y-1/2"
                             >
                                 <Dialog.Title className="sr-only">Ask Tidy AI</Dialog.Title>
                                 <Dialog.Description className="sr-only">
-                                    Tell Tidy what to do in plain English — AI will set up your rules automatically
+                                    Describe your instruction, then review the interpreted rules before applying them.
                                 </Dialog.Description>
 
                                 <div
-                                    className="overflow-hidden rounded-[20px] flex flex-col bg-background/80 backdrop-blur-xl border-[0.5px] border-black/10 dark:border-white/[0.15] shadow-[0_24px_48px_rgba(0,0,0,0.2)] dark:shadow-[0_24px_48px_rgba(0,0,0,0.4)]"
-                                    style={{ fontFamily: "var(--font-sf)" }}
+                                    className="fluent-surface overflow-hidden rounded-lg flex flex-col bg-card border border-black/10 dark:border-white/[0.15] shadow-[0_24px_48px_rgba(0,0,0,0.2)] dark:shadow-[0_24px_48px_rgba(0,0,0,0.4)]"
+                                    style={{ fontFamily: "var(--font-ui)" }}
                                 >
                                     {/* Header */}
                                     <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 dark:border-white/[0.08]">
-                                        <div className="flex items-center gap-2 text-foreground/90 dark:text-white/90">
+                                        <div className="flex items-center gap-2 text-foreground dark:text-foreground">
                                             <Sparkles className="w-4 h-4 text-[var(--system-purple)]" aria-hidden="true" />
-                                            <span className="text-[13px] font-semibold">Ask Tidy AI</span>
-                                            {/* HIG Generative AI: Communicate where your app uses AI */}
+                                            <span className="text-[14px] font-semibold">Ask Tidy AI</span>
+                                            {/* Explain where AI is used. */}
                                             <span
-                                                className="inline-flex items-center gap-[3px] text-[9px] font-bold uppercase tracking-wider text-[var(--system-purple)]/70 bg-[var(--system-purple)]/10 px-1.5 py-0.5 rounded-sm border border-[var(--system-purple)]/20"
+                                                className="inline-flex items-center gap-[3px] text-[12px] font-semibold text-[var(--system-purple)] bg-[var(--system-purple)]/10 px-1.5 py-0.5 rounded-sm border border-[var(--system-purple)]/20"
                                                 title="This feature uses AI to parse your plain-English request and configure your organization rules automatically"
                                                 aria-label="Powered by AI"
                                             >
@@ -61,7 +62,8 @@ export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
                                         <Dialog.Close asChild>
                                             <button
                                                 aria-label="Close dialog"
-                                                className="text-foreground/50 hover:text-foreground/80 hover:bg-black/5 dark:text-white/50 dark:hover:text-white/80 transition-colors p-1.5 rounded-[10px] dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+                                                disabled={isSubmitting}
+                                                className="text-[var(--fluent-secondary-label)] hover:text-foreground hover:bg-black/5 dark:text-[var(--fluent-secondary-label)] dark:hover:text-foreground transition-colors p-1.5 rounded-lg dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
                                             >
                                                 <X className="w-4 h-4" aria-hidden="true" />
                                             </button>
@@ -70,21 +72,22 @@ export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
 
                                     {/* Body */}
                                     <div className="p-5 flex flex-col gap-4">
-                                        <p className="text-[13px] text-muted-foreground leading-relaxed">
-                                            Just tell Tidy what you want in plain English — AI will configure your rules automatically.
+                                        <p className="text-[14px] text-muted-foreground leading-relaxed">
+                                            Describe what you want to organize. Review the proposed rules before applying them.
                                         </p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {[
-                                                "Move old PDFs to Archive",
-                                                "Organize screenshots by date",
-                                                "Find and remove duplicates",
-                                                "Rename files with smart names",
+                                                "Organize PDFs from Downloads",
+                                                "Sort images into smart folders",
+                                                "Find duplicate files",
+                                                "Suggest better file names",
                                             ].map((example) => (
                                                 <button
                                                     key={example}
                                                     type="button"
+                                                    disabled={isSubmitting}
                                                     onClick={() => setRule(example)}
-                                                    className="text-[11px] px-2 py-1 rounded-md bg-[var(--system-purple)]/10 text-[var(--system-purple)]/80 border border-[var(--system-purple)]/15 hover:bg-[var(--system-purple)]/20 transition-colors"
+                                                    className="text-[12px] px-2 py-1 rounded-md bg-[var(--system-purple)]/10 text-[var(--system-purple)] border border-[var(--system-purple)]/15 hover:bg-[var(--system-purple)]/20 transition-colors"
                                                 >
                                                     {example}
                                                 </button>
@@ -96,14 +99,17 @@ export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
                                             <textarea
                                                 id="rule-input"
                                                 value={rule}
-                                                onChange={(e) => setRule(e.target.value)}
+                                                maxLength={8000}
+                                                disabled={isSubmitting}
+                                                onChange={(e) => { setRule(e.target.value); setError(null); }}
                                                 placeholder="Type your rule here..."
-                                                className="w-full bg-black/5 dark:bg-black/20 text-foreground dark:text-white/90 text-[13px] rounded-xl p-4 min-h-[120px] resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] placeholder:text-muted-foreground transition-all border border-black/5 dark:border-white/5"
+                                                className="fluent-textbox w-full text-foreground dark:text-foreground text-[14px] rounded-lg p-4 min-h-[120px] resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] placeholder:text-muted-foreground transition-all border border-black/5 dark:border-white/5"
                                                 autoFocus
                                             />
                                             {/* Magical glow effect behind textarea when focused */}
-                                            <div className="absolute inset-0 -z-10 rounded-xl bg-[var(--system-blue)] opacity-0 transition-opacity duration-300 group-focus-within:opacity-20 blur-xl" aria-hidden="true" />
+                                            <div className="absolute inset-0 -z-10 rounded-lg bg-[var(--system-blue)] opacity-0 transition-opacity duration-300 group-focus-within:opacity-20 blur-xl" aria-hidden="true" />
                                         </div>
+                                        {error && <p role="alert" className="fluent-rule-error">{error}</p>}
                                     </div>
 
                                     {/* Footer */}
@@ -111,32 +117,33 @@ export function NaturalLanguageRuleBuilder({ isOpen, onClose, onSave }: Props) {
                                         <button
                                             onClick={onClose}
                                             disabled={isSubmitting}
-                                            className="px-4 py-1.5 text-[13px] text-foreground/60 dark:text-white/60 hover:text-foreground/90 hover:bg-black/5 dark:hover:text-white/90 dark:hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+                                            className="px-4 py-1.5 text-[14px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:text-foreground hover:bg-black/5 dark:hover:text-foreground dark:hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={async () => {
                                                 setIsSubmitting(true);
+                                                setError(null);
                                                 try {
                                                     await onSave(rule);
                                                     setRule("");
                                                     onClose();
                                                 } catch (e) {
-                                                    console.error("Rule submission failed", e);
+                                                    setError(e instanceof Error ? e.message : "Couldn't prepare the rule. Please try again.");
                                                 } finally {
                                                     setIsSubmitting(false);
                                                 }
                                             }}
                                             disabled={!rule.trim() || isSubmitting}
-                                            className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] text-white bg-[var(--system-blue)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-[10px] shadow-lg shadow-[var(--system-blue)]/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                            className="fluent-primary flex items-center gap-1.5 px-4 py-1.5 text-[14px] text-[var(--accent-text)] bg-[var(--system-blue)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-lg shadow-[var(--system-blue)]/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                                         >
                                             {isSubmitting ? (
                                                 <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" aria-hidden="true" />
                                             ) : (
                                                 <Check className="w-3.5 h-3.5" aria-hidden="true" />
                                             )}
-                                            {isSubmitting ? "Thinking..." : "Apply Rule"}
+                                            {isSubmitting ? "Working…" : "Review rule"}
                                         </button>
                                     </div>
                                 </div>

@@ -14,6 +14,8 @@ export interface CategoryRule {
   subfolders: boolean;
   smartCategorization?: boolean;
   duplicateDetection?: boolean;
+  /** Year or year/month folders under the category, from the modified date. */
+  dateFolders?: "none" | "year" | "month";
 }
 
 export interface RunFilters {
@@ -41,6 +43,9 @@ export interface AcceptedRename {
 
 /** The full request for a run, as sent from the renderer. */
 export interface OrganizeRequest {
+  includeSubfolders?: boolean;
+  selectedSourceFolders?: string[] | null;
+  selectedFileExtensions?: string[] | null;
   sourcePath: string;
   destPath: string;
   categories: CategoryRule[];
@@ -48,10 +53,17 @@ export interface OrganizeRequest {
   conflictResolution: ConflictResolution;
   schedule?: ScheduleSettings;
   renames?: Record<string, AcceptedRename>;
+  /**
+   * Limit the run to these files (absolute paths). Used by the watched folder
+   * so only newly arrived files move. Scope and filters still apply.
+   */
+  onlyPaths?: string[];
 }
 
 /** One completed move, recorded so the run can be reversed. */
 export interface Operation {
+  /** Stable identity, including when two runs reuse the same paths. */
+  id?: string;
   originalPath: string;
   newPath: string;
   originalName: string;
@@ -77,6 +89,7 @@ export interface RunResult {
 
 /** An AI rename suggestion for one file. */
 export interface RenameSuggestion {
+  source?: "ai" | "local";
   suggested: string;
   reason: string;
   confidence: "high" | "medium" | "low";
@@ -90,10 +103,12 @@ export interface FileForRename {
   path: string;
   /** Size in bytes. */
   size: number;
+  modifiedMs?: number;
 }
 
 /** One row in the preview sheet. */
 export interface PreviewEntry {
+  relativePath: string;
   id: string;
   name: string;
   ext: string;
@@ -102,6 +117,8 @@ export interface PreviewEntry {
   from: string;
   path: string;
   category: string;
+  categoryId: string;
+  modifiedMs: number;
   needsReview: boolean;
   isDuplicate: boolean;
   duplicateOf?: string;

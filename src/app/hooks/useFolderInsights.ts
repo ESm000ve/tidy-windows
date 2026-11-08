@@ -8,7 +8,7 @@ import type { InsightData } from "../types";
  * newer scan has started, so switching folders quickly can't leave stale counts
  * on screen. Returns `null` when there is no folder or no desktop bridge.
  */
-export function useFolderInsights(sourcePath: string): InsightData | null {
+export function useFolderInsights(sourcePath: string, includeSubfolders = false, destPath = "", selectedSourceFolders?: string[] | null, selectedFileExtensions?: string[] | null): InsightData | null {
   const [data, setData] = useState<InsightData | null>(null);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export function useFolderInsights(sourcePath: string): InsightData | null {
 
     let current = true;
     window.electron
-      .getFolderInsights(sourcePath)
+      .getFolderInsights(sourcePath, { includeSubfolders, destPath, selectedSourceFolders, selectedFileExtensions })
       .then((result) => {
         if (current) setData(result);
       })
@@ -30,7 +30,7 @@ export function useFolderInsights(sourcePath: string): InsightData | null {
     return () => {
       current = false;
     };
-  }, [sourcePath]);
+  }, [sourcePath, includeSubfolders, destPath, selectedSourceFolders, selectedFileExtensions]);
 
   return data;
 }

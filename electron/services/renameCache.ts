@@ -2,23 +2,25 @@
  * On-disk cache of AI rename suggestions.
  *
  * Suggestions cost an API call each, and previewing the same folder twice is
- * common, so results are keyed by name and size and persisted between launches.
- * Including the size means an edited file is re-analysed rather than served a
- * suggestion describing its old contents.
+ * common, so results are keyed by full path, size, and modification time.
+ * Two folders can contain different files with the same name and byte length.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import type { RenameSuggestion } from "../types";
+import { validateRenameSuggestions } from "./smartRename";
+import { normalizeNamingStyle, type NamingStyle } from "../../src/shared/naming";
 
 const CACHE_FILENAME = ".file-organizer-cache.json";
+const CACHE_LIMIT = 2000;
 
 let cache = new Map<string, RenameSuggestion>();
 let cachePath = "";
 
 /** Cache key for a file. Must be stable across runs. */
-export function cacheKey(name: string, sizeBytes: number): string {
-  return `${name}|${sizeBytes}`;
+export function cacheKey(filePath: string, sizeBytes: number, modifiedMs: number, style: NamingStyle = "descriptive"): string {
+  return JSON.stringify([filePath, sizeBytes, modifiedMs, normalizeNamingStyle(style), 1]);
 }
 
 /** Load the cache from the user-data directory. Call once, after `app.whenReady`. */
@@ -27,7 +29,16 @@ export function loadRenameCache(): void {
   try {
     if (!fs.existsSync(cachePath)) return;
     const parsed = JSON.parse(fs.readFileSync(cachePath, "utf-8")) as Record<string, RenameSuggestion>;
-    cache = new Map(Object.entries(parsed));
+    cache = new Map();
+    for (const [key, value] of Object.entries(parsed)) {
+      try {
+        const [filePath, size, modifiedMs, style, version] = JSON.parse(key);
+        if (version !== 1 || style !== normalizeNamingStyle(style)) continue;
+        if (typeof filePath !== "string" || typeof size !== "number" || typeof modifiedMs !== "number") continue;
+        const valid = validateRenameSuggestions([{ id: "cached", name: path.basename(filePath), path: filePath, size }], { cached: value }, value?.source === "local" ? "local" : "ai").cached;
+        if (valid) setCachedRename(key, valid);
+      } catch { /* Discard entries written by an older cache format. */ }
+    }
   } catch (error) {
     // A corrupt cache is not worth blocking launch over; start empty.
     console.warn("Could not read the rename cache; starting fresh.", error);
@@ -39,7 +50,9 @@ export function getCachedRename(key: string): RenameSuggestion | undefined {
 }
 
 export function setCachedRename(key: string, suggestion: RenameSuggestion): void {
+  cache.delete(key);
   cache.set(key, suggestion);
+  while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
 }
 
 /** Persist the cache. Called once per preview scan, not once per suggestion. */

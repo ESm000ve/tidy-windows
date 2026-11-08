@@ -22,7 +22,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': mime[path.extname(p)] || 'application/octet-stream' });
   fs.createReadStream(p).pipe(res);
 });
-const PORT = 4173;
+const PORT = 4175;
 await new Promise(r => server.listen(PORT, r));
 
 // CI installs its own browser; CHROMIUM_PATH lets a sandbox point at an existing one.
@@ -84,7 +84,7 @@ await page.waitForTimeout(300);
 
 // 7. AI command bar accepts input and its send button enables.
 const ai = page.locator('#nl-inline-input');
-await ai.fill('Move old PDFs to Archive');
+await ai.fill('Organize PDFs modified within the past month');
 await page.waitForTimeout(250);
 check('AI send button enables with input', !(await page.locator('#nl-send-btn').isDisabled()));
 
@@ -106,6 +106,12 @@ if (await dialog.count()) { await page.locator('[role="alertdialog"] button').cl
 
 // 10. Filter selects are wired.
 check('filter selects present', await page.locator('section[aria-label="Filters"] [role="combobox"]').count() === 2);
+
+await ai.fill('Organize old PDFs');await page.locator('#nl-send-btn').click();
+const question=page.getByRole('dialog',{name:'One detail first',exact:true});await question.waitFor();
+check('vague instructions ask before configuring rules',(await question.innerText()).includes('Which date range'));
+await question.getByRole('button',{name:'Cancel',exact:true}).click();await question.waitFor({state:'hidden'});
+check('cancelling a question leaves filters unchanged',(await page.getByRole('combobox',{name:'Date modified',exact:true}).innerText())==='Any time');
 
 console.log(results.map(r => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '  — ' + r.detail : ''}`).join('\n'));
 console.log('\nconsole errors:', errors.length ? errors : 'none');

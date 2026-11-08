@@ -8,15 +8,6 @@ import os from "node:os";
 import path from "node:path";
 import type { CategoryRule, RunFilters } from "../types";
 
-/**
- * How much of a file is read to fingerprint it.
- *
- * Duplicate detection is a fast pre-filter, not forensic comparison: hashing
- * the first 64 KB alongside the exact byte length catches real duplicates
- * (copies, re-downloads) without reading gigabytes of video.
- */
-const HASH_SAMPLE_BYTES = 64 * 1024;
-
 const BYTES_PER_KB = 1024;
 const BYTES_PER_MB = 1024 * 1024;
 
@@ -28,15 +19,51 @@ const MAX_AGE_DAYS: Record<Exclude<RunFilters["dateModified"], "any">, number> =
   year: 365,
 };
 
-/** A size fingerprint for a file: a hash of its head plus its exact length. */
+/** Hash the complete file in bounded chunks; shared headers are not duplicates. */
 export async function fingerprintFile(filePath: string, sizeInBytes: number): Promise<string> {
-  const handle = await fsp.open(filePath, "r");
-  try {
-    const buffer = Buffer.alloc(Math.min(sizeInBytes, HASH_SAMPLE_BYTES));
-    await handle.read(buffer, 0, buffer.length, 0);
-    return `${crypto.createHash("md5").update(buffer).digest("hex")}${sizeInBytes}`;
-  } finally {
-    await handle.close();
+  const hash = crypto.createHash("sha256");
+  for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk);
+  return `${sizeInBytes}:${hash.digest("hex")}`;
+}
+
+/**
+ * Finds files whose complete contents match an earlier file.
+ *
+ * Files can only be identical if their sizes match, so a file is hashed only
+ * once a second file of the same size turns up. Most files in a typical folder
+ * have a unique size and are never read. Earlier files must still be at the
+ * path they were checked with, which holds for the preview (nothing moves).
+ */
+export class DuplicateFinder<T> {
+  private readonly unhashed = new Map<number, { path: string; value: T }[]>();
+  private readonly hashedSizes = new Set<number>();
+  private readonly originals = new Map<string, T>();
+
+  /** Return the earlier identical file's value, or `undefined` if this file is the first. */
+  async check(filePath: string, sizeInBytes: number, value: T): Promise<T | undefined> {
+    const waiting = this.unhashed.get(sizeInBytes);
+    if (!waiting && !this.hashedSizes.has(sizeInBytes)) {
+      this.unhashed.set(sizeInBytes, [{ path: filePath, value }]);
+      return undefined;
+    }
+    if (waiting) {
+      this.unhashed.delete(sizeInBytes);
+      this.hashedSizes.add(sizeInBytes);
+      for (const earlier of waiting) {
+        try {
+          const fingerprint = await fingerprintFile(earlier.path, sizeInBytes);
+          if (!this.originals.has(fingerprint)) this.originals.set(fingerprint, earlier.value);
+        } catch (error) {
+          // An unreadable file is simply not compared.
+          console.warn(`Could not fingerprint ${earlier.path}.`, error);
+        }
+      }
+    }
+    const fingerprint = await fingerprintFile(filePath, sizeInBytes);
+    const original = this.originals.get(fingerprint);
+    if (original !== undefined) return original;
+    this.originals.set(fingerprint, value);
+    return undefined;
   }
 }
 
@@ -127,4 +154,71 @@ export async function moveFile(from: string, to: string): Promise<void> {
     await fsp.copyFile(from, to);
     await fsp.unlink(from);
   }
+}
+
+/** Validate a single user/AI-supplied name before joining it to a directory. */
+export function validatePathSegment(name: string, platform: NodeJS.Platform = process.platform): string {
+  if (!name || name === "." || name === ".." || /[\\/\x00]/.test(name)) throw new Error("Invalid file or folder name");
+  if (platform === "win32" && (/[<>:"|?*\x00-\x1f]/.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))) {
+    throw new Error("This file or folder name is not supported by Windows: " + name);
+  }
+  return name;
+}
+
+/** A stable source-relative identity keeps same-named nested files separate. */
+export interface SourceFile {
+  path: string;
+  relativePath: string;
+  name: string;
+  stats: fs.Stats;
+}
+export interface SourceScanOptions {
+  includeSubfolders?: boolean;
+  selectedSourceFolders?: string[] | null;
+  selectedFileExtensions?: string[] | null;
+  destPath?: string;
+  excludeHidden?: boolean;
+  onDirectory?: (relativePath: string) => void;
+  /** Visit folders only; files are not examined or yielded. */
+  directoriesOnly?: boolean;
+}
+
+/** Enumerate files without following links or revisiting the destination/Undo backups. */
+export async function* walkSourceFiles(sourcePath: string, options: SourceScanOptions = {}): AsyncGenerator<SourceFile> {
+  const source = await fsp.realpath(sourcePath);
+  const identity = (value: string) => process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value);
+  let destination: string | undefined;
+  if (options.destPath) {
+    try { destination = await fsp.realpath(options.destPath); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; destination = path.resolve(options.destPath); }
+  }
+  if (options.includeSubfolders && destination && identity(source) === identity(destination)) {
+    throw new Error("When including subfolders, choose a destination different from the source folder.");
+  }
+  const selected = options.includeSubfolders && options.selectedSourceFolders != null
+    ? new Set(options.selectedSourceFolders.map(folder => identity(path.resolve(source, folder)))) : null;
+  const extensions = !options.includeSubfolders || options.selectedFileExtensions == null ? null : new Set(options.selectedFileExtensions.map(ext => ext.replace(/^\./, "").toLowerCase()));
+  async function* walk(directory: string): AsyncGenerator<SourceFile> {
+    options.onDirectory?.(path.relative(source, directory) || ".");
+    const entries = (await fsp.readdir(directory, { withFileTypes: true })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = path.join(directory, entry.name);
+      if (destination && identity(fullPath) === identity(destination)) continue;
+      if (entry.isDirectory()) {
+        if (!options.includeSubfolders || entry.name.toLowerCase() === ".tidy undo" || (options.excludeHidden && entry.name.startsWith("."))) continue;
+        const stats = await fsp.lstat(fullPath);
+        if (!stats.isDirectory() || stats.isSymbolicLink()) continue;
+        if (selected && ![...selected].some(folder => folder === identity(fullPath) || folder.startsWith(identity(fullPath) + path.sep))) continue;
+        yield* walk(fullPath);
+      } else if (entry.isFile()) {
+        if (options.directoriesOnly) continue;
+        if (selected && !selected.has(identity(directory))) continue;
+        if (extensions && !extensions.has(path.extname(entry.name).slice(1).toLowerCase())) continue;
+        const stats = await fsp.lstat(fullPath);
+        if (stats.isFile() && !stats.isSymbolicLink()) yield { path: fullPath, relativePath: path.relative(source, fullPath), name: entry.name, stats };
+      }
+    }
+  }
+  yield* walk(source);
 }

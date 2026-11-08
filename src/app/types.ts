@@ -5,6 +5,7 @@
  * …) live in `src/electron.d.ts`; this module covers UI-level shapes only.
  */
 import type { Icon } from "./components/icons";
+import type { DateFolders } from "../shared/dateFolders";
 
 /** How far back a file's modification time may be for it to be included. */
 export type DateFilter = "any" | "today" | "week" | "month" | "year";
@@ -30,6 +31,7 @@ export interface Filters {
  * process during a run and replayed in reverse by `undoOrganize`.
  */
 export interface Operation {
+  id?: string;
   originalPath: string;
   newPath: string;
   originalName: string;
@@ -69,4 +71,36 @@ export interface InsightGroup {
 export interface AiFeedback {
   type: "success" | "error";
   message: string;
+}
+
+/** A category rule as configured in the UI. */
+export interface Category {
+  id: string;
+  name: string;
+  enabled: boolean;
+  extensions: string[];
+  subfolders: boolean;
+  smartCategorization?: boolean;
+  duplicateDetection?: boolean;
+  /** Year or year/month folders under the category, from the modified date. */
+  dateFolders?: DateFolders;
+}
+
+/** Everything a preview or run needs, composed by `App` from its settings. */
+export interface OrganizerConfig {
+  includeSubfolders?: boolean;
+  selectedSourceFolders?: string[] | null;
+  selectedFileExtensions?: string[] | null;
+  sourcePath: string;
+  destPath: string;
+  categories: Category[];
+  filters: Filters;
+  conflictResolution: ConflictResolution;
+  schedule: {
+    enabled: boolean;
+    frequency: ScheduleType;
+    date: Date | null;
+    /** 24-hour "HH:MM". */
+    time: string;
+  };
 }

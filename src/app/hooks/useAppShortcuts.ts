@@ -5,8 +5,6 @@ interface ShortcutHandlers {
   onRun: () => void;
   /** ⌘Z / Ctrl+Z, when there is a completed run to reverse. */
   onUndo: () => void;
-  /** ⌘, / Ctrl+, — opens the audit log. */
-  onOpenAuditLog: () => void;
 }
 
 interface ShortcutOptions {
@@ -62,7 +60,7 @@ export function useAppShortcuts(
 
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        latest.current.onOpenAuditLog();
+        window.dispatchEvent(new Event("tidy:open-preferences"));
         return;
       }
 

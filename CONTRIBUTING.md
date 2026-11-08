@@ -1,41 +1,31 @@
 # Contributing to Tidy
 
-Thank you for your interest in contributing! Here's how to get started.
+Use Windows 11 x64 and Node.js 22 or later. Clone your fork, then:
 
-## Development Setup
-
-```bash
-git clone https://github.com/ericauzenne/tidy.git
-cd tidy
-npm install
-cp .env.example .env   # add your GEMINI_API_KEY
+```powershell
+npm ci
+npx playwright install chromium
 npm run dev
 ```
 
-## Workflow
+The app runs without a key. For optional online AI, add your own Gemini key in Settings. `.env.example` documents the development alternative. Never commit credentials or personal test files.
 
-1. **Fork** the repository and create a new branch from `main`:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-2. **Make your changes.** Keep commits focused — one logical change per commit.
-3. **Run a type check** before pushing:
-   ```bash
-   npm run lint
-   ```
-4. **Open a Pull Request** against `main` with a clear title and description of what changed and why.
+## Before opening a pull request
 
-## Guidelines
+```powershell
+npm run verify
+npm run check:publish -- --history --build
+```
 
-- **Code style** — TypeScript throughout. Follow the patterns already in the codebase (functional components, IPC for Electron ↔ renderer communication, no business logic in the renderer).
-- **Electron security** — Keep `contextIsolation: true` and `nodeIntegration: false`. All Node.js access must go through the context bridge in `electron/preload.ts`.
-- **AI features** — Any addition that calls the Gemini API must gracefully degrade when `GEMINI_API_KEY` is not set.
-- **No new dependencies without discussion** — Open an issue first if you need to add a new package.
+Describe the problem, resulting behavior, and relevant validation. UI changes should include synthetic-data captures. `npm run screenshots` regenerates portfolio images after a build; review them before committing.
 
-## Reporting Issues
+## Working conventions
 
-Please open an issue on GitHub with:
-- A clear title describing the problem
-- Steps to reproduce
-- Expected vs. actual behaviour
-- Your OS and Node.js version
+- Use TypeScript and follow the component, hook, service, and IPC boundaries. The type checker rejects unused declarations.
+- Keep filesystem access in Electron's main process behind the preload bridge. Preserve context isolation, disabled Node integration, and renderer sandboxing.
+- Validate AI output and imported settings. Missing credentials must leave local organization usable.
+- Preserve preview/run agreement, conflict safety, and Undo. Use fixtures in `.test-artifacts/`.
+- Update product and design-system documentation when behavior changes. Label proposed behavior and incomplete research honestly.
+- Keep dependency changes focused and explain why they are needed.
+
+Report ordinary defects with synthetic reproduction steps, expected behavior, Windows version, and app version. Follow [SECURITY.md](SECURITY.md) for sensitive reports.

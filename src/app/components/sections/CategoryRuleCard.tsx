@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { clsx } from "clsx";
 import { FilterCard } from "../FilterCard";
-import { MacToggle } from "../controls/MacToggle";
+import { FluentToggle } from "../controls/FluentToggle";
 import { Folder } from "../icons";
 import {
   AVAILABLE_EXTENSIONS,
@@ -11,7 +11,9 @@ import {
   SMART_SUBFOLDERS,
   type BuiltInCategoryId,
 } from "../../constants";
-import type { Category } from "../../lib/generateScript";
+import type { Category } from "../../types";
+import { FluentSelect } from "../controls/FluentSelect";
+import { DATE_FOLDER_OPTIONS, normalizeDateFolders } from "../../../shared/dateFolders";
 
 /** How many extensions the subfolder preview lists before collapsing to "+N more". */
 const SUBFOLDER_PREVIEW_LIMIT = 4;
@@ -23,8 +25,6 @@ interface CategoryRuleCardProps {
   matchesSearch: boolean;
   /** True while a search is active at all, which enables match highlighting. */
   searching: boolean;
-  /** The current search text, used to dim non-matching extension chips. */
-  searchQuery: string;
   onToggleExpanded: () => void;
   onPatch: (patch: Partial<Category>) => void;
   onToggleExtension: (extension: string) => void;
@@ -36,7 +36,6 @@ export function CategoryRuleCard({
   expanded,
   matchesSearch,
   searching,
-  searchQuery,
   onToggleExpanded,
   onPatch,
   onToggleExtension,
@@ -87,8 +86,8 @@ export function CategoryRuleCard({
 
             <div className="p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <label className="text-[14px] text-muted-foreground">Create Subfolders</label>
-                <MacToggle
+                <label className="text-[14px] text-muted-foreground">Create subfolders</label>
+                <FluentToggle
                   checked={category.subfolders}
                   onCheckedChange={(subfolders) => onPatch({ subfolders })}
                   disabled={!category.enabled}
@@ -100,15 +99,15 @@ export function CategoryRuleCard({
 
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[14px] text-muted-foreground">Smart Categorization</label>
+                  <label className="text-[14px] text-muted-foreground">Smart categorization</label>
                   <p
-                    className="text-[12px] text-foreground/40"
+                    className="text-[12px] text-[var(--fluent-secondary-label)]"
                     title="Group files by detected content type (e.g., Screenshots, Photos, Scans). Preview before applying."
                   >
                     Advanced categorization with AI
                   </p>
                 </div>
-                <MacToggle
+                <FluentToggle
                   checked={Boolean(category.smartCategorization)}
                   onCheckedChange={(smartCategorization) => onPatch({ smartCategorization })}
                   disabled={!category.enabled}
@@ -120,34 +119,43 @@ export function CategoryRuleCard({
 
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[14px] text-muted-foreground">Duplicate Detection</label>
+                  <label className="text-[14px] text-muted-foreground">Duplicate detection</label>
                   <p
-                    className="text-[12px] text-foreground/40"
+                    className="text-[12px] text-[var(--fluent-secondary-label)]"
                     title="Identify and handle duplicate files. Preview before applying."
                   >
                     Detect duplicates
                   </p>
                 </div>
-                <MacToggle
+                <FluentToggle
                   checked={Boolean(category.duplicateDetection)}
                   onCheckedChange={(duplicateDetection) => onPatch({ duplicateDetection })}
-                  disabled={!category.enabled || !category.subfolders}
+                  disabled={!category.enabled}
                   color="blue"
                   size="sm"
                   aria-label={`Duplicate detection for ${category.name}`}
                 />
               </div>
 
+              <FluentSelect
+                id={`date-folders-${category.id}`}
+                label="Date folders"
+                value={normalizeDateFolders(category.dateFolders)}
+                onChange={(dateFolders) => onPatch({ dateFolders })}
+                options={DATE_FOLDER_OPTIONS}
+                description="Uses each file's last-modified date, not the photo's capture date."
+              />
+
               {category.subfolders && category.enabled && (
                 <div>
-                  <label className="text-[13px] text-muted-foreground block mb-2">
-                    {category.smartCategorization ? "Content Types" : "By Extension"}
+                  <label className="text-[14px] text-muted-foreground block mb-2">
+                    {category.smartCategorization ? "Content types" : "By extension"}
                   </label>
-                  <div className="p-2.5 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] border-[0.5px] border-black/5 dark:border-white/[0.06]">
+                  <div className="p-2.5 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/[0.06]">
                     <div className="flex items-start gap-1.5">
-                      <Folder className="w-3 h-3 text-foreground/30 shrink-0 mt-0.5" aria-hidden="true" />
+                      <Folder className="w-3 h-3 text-[var(--fluent-secondary-label)] shrink-0 mt-0.5" aria-hidden="true" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-foreground/70 mb-1">{category.name}</p>
+                        <p className="text-[14px] text-[var(--fluent-secondary-label)] mb-1">{category.name}</p>
                         <div className="pl-3 space-y-0.5">
                           {category.smartCategorization
                             ? smartSubfolders.map((subfolder) => (
@@ -170,12 +178,10 @@ export function CategoryRuleCard({
               )}
 
               <div>
-                <label className="text-[13px] text-muted-foreground block mb-2">Extensions</label>
+                <label className="text-[14px] text-muted-foreground block mb-2">Extensions</label>
                 <div className="flex flex-wrap gap-1.5">
                   {offeredExtensions.map((extension) => {
                     const selected = category.extensions.includes(extension);
-                    const matchesQuery =
-                      !searching || extension.toLowerCase().includes(searchQuery.toLowerCase());
 
                     return (
                       <button
@@ -187,13 +193,7 @@ export function CategoryRuleCard({
                         }}
                         disabled={!category.enabled}
                         aria-pressed={selected}
-                        className={clsx(
-                          "px-2.5 py-1 text-[12px] rounded-[8px] border-[0.5px] transition-all",
-                          selected && category.enabled
-                            ? "bg-[var(--system-blue)]/15 border-[var(--system-blue)]/30 text-[var(--system-blue)] hover:bg-[var(--system-blue)]/22"
-                            : "bg-black/5 dark:bg-white/[0.05] border-black/10 dark:border-white/[0.12] text-foreground/40 dark:text-white/40 hover:text-foreground/65 dark:hover:text-white/65 hover:bg-black/10 dark:hover:bg-white/[0.09]",
-                          searching && !matchesQuery && "opacity-20",
-                        )}
+                        className="fluent-extension"
                       >
                         .{extension}
                       </button>
@@ -232,8 +232,8 @@ function SubfolderRow({
         className={clsx(
           mono && "font-mono",
           muted
-            ? "text-[11px] text-foreground/30 dark:text-white/25"
-            : "text-[12px] text-foreground/40",
+            ? "text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]"
+            : "text-[12px] text-[var(--fluent-secondary-label)]",
         )}
       >
         {label}

@@ -12,6 +12,7 @@ export default defineConfig({
     electron({
       main: {
         entry: 'electron/main.ts',
+        vite: { build: { emptyOutDir: true } },
       },
       preload: {
         input: path.join(__dirname, 'electron/preload.ts'),
@@ -31,6 +32,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'bufferutil': path.resolve(__dirname, './electron/lib/emptyStub.cjs'),
+      'utf-8-validate': path.resolve(__dirname, './electron/lib/emptyStub.cjs'),
     },
   },
   assetsInclude: ['**/*.svg', '**/*.csv'],

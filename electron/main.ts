@@ -7,16 +7,20 @@
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow } from "electron";
+import { app } from "electron";
 import * as dotenv from "dotenv";
 import { registerIpcHandlers } from "./ipc";
 import { setupMenu } from "./menu";
 import { loadRenameCache } from "./services/renameCache";
-import { VITE_DEV_SERVER_URL, createWindow, getMainWindow } from "./window";
+import { attachCloseToTray, loadBackgroundSettings, shouldStartHidden, syncTray } from "./services/background";
+import { VITE_DEV_SERVER_URL, appIconPath, createWindow, sendToRenderer, showMainWindow } from "./window";
+import { openFromTray, runFromTray } from "./ipc/system";
+import { loadHistory } from "./services/history";
+import { CHANNELS } from "./channels";
 
 // Loads GEMINI_API_KEY from .env in development. In a packaged build the key
 // comes from the real environment; a missing key is handled, not fatal.
-dotenv.config();
+if (!app.isPackaged) dotenv.config({ quiet: true });
 
 const MAIN_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,35 +30,30 @@ const APP_ROOT = path.join(MAIN_DIR, "..");
 /** Built renderer assets, loaded directly from disk in a packaged build. */
 const RENDERER_DIST = path.join(APP_ROOT, "dist");
 
-const REPOSITORY_URL = "https://github.com/ericauzenne/tidy";
+const REPOSITORY_URL = "https://github.com/ESm000ve/tidy-windows";
 
 process.env.APP_ROOT = APP_ROOT;
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(APP_ROOT, "public") : RENDERER_DIST;
 
-function configureAboutPanel(): void {
-  if (process.platform !== "darwin") return;
-  app.setAboutPanelOptions({
-    applicationName: "Tidy",
-    applicationVersion: app.getVersion(),
-    copyright: `Copyright © ${new Date().getFullYear()} Eric Auzenne`,
-  });
-}
-
-void app.whenReady().then(() => {
+// Prevent separate launches from racing file operations in the same profile.
+if (!app.requestSingleInstanceLock()) app.quit();
+else void app.whenReady().then(() => {
+  // Lets Windows attribute notifications to Tidy; matches the installer's appId.
+  app.setAppUserModelId("com.ericauzenne.tidy");
   loadRenameCache();
-  configureAboutPanel();
+  loadBackgroundSettings();
+  loadHistory(() => sendToRenderer(CHANNELS.historyChanged));
   registerIpcHandlers();
-  createWindow(RENDERER_DIST);
+  const window = createWindow(RENDERER_DIST, { show: !shouldStartHidden() });
+  attachCloseToTray(window);
+  syncTray(appIconPath(), openFromTray, runFromTray);
   setupMenu({ repositoryUrl: REPOSITORY_URL });
 });
 
-// On macOS an app stays running with no windows open; elsewhere, closing the
-// last window quits.
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+app.on("second-instance", () => showMainWindow());
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow(RENDERER_DIST);
-  else getMainWindow()?.focus();
+// Closing the last window exits the Windows app. With background running on,
+// closing only hides the window, so this fires on a real exit.
+app.on("window-all-closed", () => {
+  app.quit();
 });

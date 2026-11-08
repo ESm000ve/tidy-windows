@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { WarningCircle as AlertCircle, ArrowLeftRight as ArrowRightLeft, Check, ChevronRight, CircleDashed, Copy, Pencil, Scroll as ScrollText, Command as Terminal, X } from "./icons";
+import { WarningCircle as AlertCircle, ArrowLeftRight as ArrowRightLeft, Check, ChevronRight, CircleDashed, Pencil, Scroll as ScrollText, Command as Terminal, X } from "./icons";
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type RunState = "idle" | "scanning" | "running" | "completed" | "error";
 
@@ -13,6 +13,8 @@ export interface RunMetrics {
   timestamp: Date | null;
   destPath?: string;
   operations?: any[];
+  /** This run's id in the main-process run history. */
+  runId?: string;
 }
 
 interface StatusBarProps {
@@ -20,6 +22,9 @@ interface StatusBarProps {
   metrics: RunMetrics;
   logEvents?: { level: "info" | "warn" | "error" | "success"; message: string; time: string }[];
 }
+
+/** Log lines drawn in the Run Log drawer. Older lines are summarized. */
+const MAX_VISIBLE_LOG_LINES = 300;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatTimestamp(date: Date): string {
@@ -58,8 +63,9 @@ function MetricChip({
 }) {
   return (
     <div
+      role="group"
       aria-label={`${value} ${label}`}
-      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] transition-colors ${emphasized
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] transition-colors ${emphasized
         ? "bg-red-500/10"
         : "bg-transparent hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
         }`}
@@ -67,14 +73,14 @@ function MetricChip({
       <span className={`flex-shrink-0 ${colorClass}`} aria-hidden="true">{icon}</span>
       <span
         aria-hidden="true"
-        className={`text-[13px] tabular-nums ${emphasized ? "text-red-500 dark:text-red-400" : "text-foreground/80 dark:text-white/65"
+        className={`text-[14px] tabular-nums ${emphasized ? "text-[var(--system-red)] dark:text-[var(--system-red)]" : "text-foreground dark:text-[var(--fluent-secondary-label)]"
           }`}
       >
         {value.toLocaleString()}
       </span>
       <span
         aria-hidden="true"
-        className={`text-[13px] ${emphasized ? "text-red-500/70 dark:text-red-400/70" : "text-foreground/60 dark:text-white/50"
+        className={`text-[14px] ${emphasized ? "text-[var(--system-red)] dark:text-[var(--system-red)]" : "text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]"
           }`}
       >
         {label}
@@ -142,13 +148,16 @@ function LogDrawer({
   metrics: RunMetrics;
   logEvents?: { level: "info" | "warn" | "error" | "success"; message: string; time: string }[];
 }) {
-  const lines = logEvents;
+  // Show only the newest lines: a large run can log thousands, and drawing every
+  // one makes the drawer slow to open.
+  const hiddenCount = Math.max(0, logEvents.length - MAX_VISIBLE_LOG_LINES);
+  const lines = hiddenCount ? logEvents.slice(-MAX_VISIBLE_LOG_LINES) : logEvents;
 
   const levelStyle = {
-    info: { color: "text-white/50", prefix: "·" },
-    success: { color: "text-[var(--system-green)]/80", prefix: "✓" },
+    info: { color: "text-foreground", prefix: "·" },
+    success: { color: "text-[var(--system-green)]", prefix: "✓" },
     warn: { color: "text-amber-400/70", prefix: "⚠" },
-    error: { color: "text-[var(--system-red)]/80", prefix: "✕" },
+    error: { color: "text-[var(--system-red)]", prefix: "✕" },
   };
 
   return (
@@ -177,7 +186,7 @@ function LogDrawer({
             role="dialog"
             aria-label="Run Log"
             aria-modal="true"
-            className="fixed bottom-[49px] left-4 right-4 z-50 rounded-xl overflow-hidden border-[0.5px] border-black/10 dark:border-white/[0.10] bg-background/80 backdrop-blur-xl shadow-[0_-8px_32px_rgba(0,0,0,0.45)]"
+            className="fixed bottom-[49px] left-4 right-4 z-50 rounded-lg overflow-hidden border border-black/10 dark:border-white/[0.10] bg-background/80 backdrop-blur-xl shadow-[0_-8px_32px_rgba(0,0,0,0.45)]"
             style={{
               maxWidth: 680,
               marginLeft: "auto",
@@ -189,10 +198,10 @@ function LogDrawer({
               className="flex items-center justify-between px-4 py-3 border-b-[0.5px] border-black/5 dark:border-white/[0.07]"
             >
               <div className="flex items-center gap-2">
-                <Terminal className="w-3.5 h-3.5 text-foreground/50 dark:text-white/50" aria-hidden="true" />
-                <span className="text-[13px] text-foreground/60 dark:text-white/60">Run Log</span>
+                <Terminal className="w-3.5 h-3.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]" aria-hidden="true" />
+                <span className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">Run Log</span>
                 {metrics.timestamp && (
-                  <span className="text-[12px] text-foreground/40 dark:text-white/40">
+                  <span className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">
                     — {formatTimestamp(metrics.timestamp)}
                   </span>
                 )}
@@ -200,7 +209,7 @@ function LogDrawer({
               <button
                 onClick={onClose}
                 aria-label="Close log"
-                className="w-8 h-8 flex items-center justify-center rounded-md text-foreground/50 dark:text-white/50 hover:text-foreground/80 dark:hover:text-white/80 hover:bg-black/5 dark:hover:bg-white/[0.08] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:text-foreground dark:hover:text-foreground hover:bg-black/5 dark:hover:bg-white/[0.08] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
               >
                 <X className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
@@ -209,25 +218,28 @@ function LogDrawer({
             {/* Log lines */}
             <div className="overflow-y-auto max-h-56 p-4 flex flex-col gap-1.5" role="log" aria-live="polite">
               {lines.length === 0 ? (
-                <p className="text-[12px] text-foreground/40 dark:text-white/40 text-center py-4">
+                <p className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] text-center py-4">
                   No log entries yet. Run Tidy to generate a log.
                 </p>
               ) : (
-                lines.map((line, i) => {
+                <>
+                {hiddenCount > 0 && (
+                  <p className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">
+                    {hiddenCount.toLocaleString()} earlier entries not shown. The Audit Log lists every file that moved.
+                  </p>
+                )}
+                {lines.map((line, i) => {
                   const s = levelStyle[line.level];
                   return (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.03, duration: 0.15 }}
+                    <div
+                      key={hiddenCount + i}
                       className="flex items-start gap-2.5"
                     >
-                      <span className="text-[11px] font-mono text-foreground/50 dark:text-white/45 shrink-0 mt-px w-[60px]">
+                      <span className="text-[12px] font-mono text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] shrink-0 mt-px w-[60px]">
                         {line.time}
                       </span>
                       <span
-                        className={`text-[11px] font-mono shrink-0 mt-px w-3 text-center ${s.color}`}
+                        className={`text-[12px] font-mono shrink-0 mt-px w-3 text-center ${s.color}`}
                         aria-hidden="true"
                       >
                         {s.prefix}
@@ -235,9 +247,10 @@ function LogDrawer({
                       <span className={`text-[12px] font-mono ${s.color} leading-relaxed`}>
                         {line.message}
                       </span>
-                    </motion.div>
+                    </div>
                   );
-                })
+                })}
+                </>
               )}
             </div>
 
@@ -247,14 +260,14 @@ function LogDrawer({
                 className="flex items-center gap-4 px-4 py-2.5 border-t-[0.5px] border-black/5 dark:border-white/[0.06]"
               >
                 <div className="flex items-center gap-1">
-                  <ChevronRight className="w-2.5 h-2.5 text-foreground/30 dark:text-white/30" aria-hidden="true" />
-                  <span className="text-[11px] font-mono text-foreground/55 dark:text-white/50">
-                    {lines.length} entries
+                  <ChevronRight className="w-2.5 h-2.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]" aria-hidden="true" />
+                  <span className="text-[12px] font-mono text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">
+                    {logEvents.length.toLocaleString()} entries
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <ChevronRight className="w-2.5 h-2.5 text-foreground/45 dark:text-white/40" aria-hidden="true" />
-                  <span className="text-[11px] font-mono text-foreground/55 dark:text-white/50">
+                  <ChevronRight className="w-2.5 h-2.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]" aria-hidden="true" />
+                  <span className="text-[12px] font-mono text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">
                     exit code {metrics.errors > 0 ? "1" : "0"}
                   </span>
                 </div>
@@ -290,14 +303,14 @@ export function StatusBar({ runState, metrics, logEvents = [] }: StatusBarProps)
         aria-label="Organization status"
         style={{
           height: "44px",
-          fontFamily: "var(--font-sf)",
+          fontFamily: "var(--font-ui)",
         }}
       >
         <div className="flex items-center w-full px-5">
           {/* ── Left: Last Run ──────────────────────────────── */}
           <div className="flex items-center gap-2 w-auto min-w-[140px] shrink-0">
             <span
-              className="text-[13px] shrink-0 text-foreground/50 dark:text-white/50 font-medium"
+              className="text-[14px] shrink-0 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] font-medium"
             >
               Last Run
             </span>
@@ -330,7 +343,7 @@ export function StatusBar({ runState, metrics, logEvents = [] }: StatusBarProps)
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="text-[13px] text-foreground/75 dark:text-white/70 truncate"
+                  className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-foreground truncate"
                 >
                   {hasLastRun
                     ? formatTimestamp(metrics.timestamp!)
@@ -358,7 +371,7 @@ export function StatusBar({ runState, metrics, logEvents = [] }: StatusBarProps)
                     icon={<ArrowRightLeft className="w-3 h-3" />}
                     value={metrics.moved}
                     label="moved"
-                    colorClass="text-foreground/50 dark:text-white/50"
+                    colorClass="text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]"
                   />
                   <MetricDivider />
                   <MetricChip
@@ -372,7 +385,7 @@ export function StatusBar({ runState, metrics, logEvents = [] }: StatusBarProps)
                     icon={<AlertCircle className="w-3 h-3" />}
                     value={metrics.errors}
                     label="errors"
-                    colorClass={hasErrors ? "text-red-500/80 dark:text-red-400/80" : "text-foreground/40 dark:text-white/40"}
+                    colorClass={hasErrors ? "text-[var(--system-red)] dark:text-[var(--system-red)]" : "text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]"}
                     emphasized={hasErrors}
                   />
                 </motion.div>
@@ -385,9 +398,9 @@ export function StatusBar({ runState, metrics, logEvents = [] }: StatusBarProps)
               onClick={() => setLogOpen((o) => !o)}
               aria-label="View run log"
               aria-expanded={logOpen}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[7px] text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] border-[0.5px] border-black/10 dark:border-white/10 ${hasErrors
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] text-[14px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] border border-black/10 dark:border-white/10 ${hasErrors
                 ? "text-[var(--system-red)] hover:text-[var(--system-red)] hover:bg-red-500/10 dark:hover:bg-[var(--system-red)]/20"
-                : "text-[var(--mac-secondary-label)] hover:text-[var(--mac-label)] bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.07] dark:hover:bg-white/[0.07]"
+                : "text-[var(--fluent-secondary-label)] hover:text-[var(--fluent-label)] bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.07] dark:hover:bg-white/[0.07]"
                 }`}
             >
               <ScrollText className="w-3 h-3" aria-hidden="true" />

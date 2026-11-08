@@ -1,6 +1,6 @@
+import { useInertHiddenLayers } from "./hooks/useInertHiddenLayers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Toaster } from "sonner";
 
 import { AccessibilityPanel } from "./components/AccessibilityPanel";
 import { AuditLogSidebar, AuditLogToggleButton } from "./components/AuditLogSidebar";
@@ -12,23 +12,27 @@ import { PreviewSheet } from "./components/PreviewSheet";
 import { StatusBar, type RunState } from "./components/StatusBar";
 import { TopBar } from "./components/TopBar";
 import { AiCommandBar } from "./components/sections/AiCommandBar";
+import { AiRuleReviewDialog, type AiRuleReview } from "./components/AiRuleReviewDialog";
 import { FiltersSection } from "./components/sections/FiltersSection";
 import { LocationsSection } from "./components/sections/LocationsSection";
 import { RulesSection } from "./components/sections/RulesSection";
+import { RuleSetsBar } from "./components/sections/RuleSetsBar";
+import { readRuleSets, type RuleSet } from "./lib/ruleSets";
 
 import { useAppShortcuts } from "./hooks/useAppShortcuts";
 import { useCategoryRules } from "./hooks/useCategoryRules";
 import { useFolderInsights } from "./hooks/useFolderInsights";
 import { useMenuActions } from "./hooks/useMenuActions";
 import { useOrganizerRun } from "./hooks/useOrganizerRun";
-import { usePersistentState } from "./hooks/usePersistentState";
+import { usePersistentState, useSavedState } from "./hooks/usePersistentState";
+import { readBoolean, readConflictResolution, readFilters, readSchedule, type SavedSchedule } from "./lib/savedSettings";
 import { useFullScreen, useSystemAccentColor } from "./hooks/useSystemAppearance";
 
-import { applyCategoryPatch, applyFilterPatch, readPath, type AiRulePatch } from "./lib/aiRules";
-import { generatePythonScript, type OrganizerConfig } from "./lib/generateScript";
+import { initialRuleQuestion, prepareRuleDraft, readRuleResponse, type ClarificationTurn } from "./lib/ruleReview";
+import { normalizeNamingStyle, type NamingStyle } from "../shared/naming";
 import { buildInsightGroups } from "./lib/insights";
 import { STORAGE_KEYS } from "./constants";
-import type { AiFeedback, ConflictResolution, Filters, ScheduleType } from "./types";
+import type { AiFeedback, ConflictResolution, Filters, OrganizerConfig, ScheduleType } from "./types";
 
 const DEFAULT_FILTERS: Filters = {
   dateModified: "any",
@@ -36,8 +40,23 @@ const DEFAULT_FILTERS: Filters = {
   excludeHidden: false,
 };
 
+/** Extensions listed first in the source file-type picker. */
+const COMMON_EXTENSIONS = ["pdf", "docx", "txt", "jpg", "png", "mp3", "mp4", "zip"];
+
 /** How long a transient AI status message stays on screen, in milliseconds. */
 const AI_FEEDBACK_TIMEOUT = { success: 4000, running: 5000 } as const;
+const SUBFOLDER_CODEC = { parse: (raw: string) => raw === "true", stringify: (value: boolean) => String(value) };
+type SourceSelection = {source: string; folders: string[] | null; types: string[] | null};
+const SOURCE_SELECTION_CODEC = {
+  parse: (raw: string): SourceSelection => {
+    const value = JSON.parse(raw);
+    const valid = (items: unknown) => items === null || (Array.isArray(items) && items.every(item => typeof item === "string"));
+    if (typeof value?.source !== "string" || !valid(value.folders) || !valid(value.types)) throw new Error("Invalid source selection");
+    return value;
+  },
+  stringify: (value: SourceSelection) => JSON.stringify(value),
+};
+const NAMING_STYLE_CODEC = { parse: normalizeNamingStyle, stringify: (style: NamingStyle) => style };
 
 /**
  * Tidy's root view.
@@ -49,19 +68,43 @@ const AI_FEEDBACK_TIMEOUT = { success: 4000, running: 5000 } as const;
  * `./components/sections`.
  */
 export default function App() {
+  useInertHiddenLayers();
   // ─── Locations ──────────────────────────────────────────────────────────────
   const [sourcePath, setSourcePath] = usePersistentState(STORAGE_KEYS.sourcePath, "");
   const [destPath, setDestPath] = usePersistentState(STORAGE_KEYS.destPath, "");
 
+  const [includeSubfolders, setIncludeSubfolders] = usePersistentState(STORAGE_KEYS.includeSubfolders, false, SUBFOLDER_CODEC);
+
+  const [sourceSelection, setSourceSelection] = usePersistentState<SourceSelection>("tidy_source_selection", {source: "", folders: null, types: null}, SOURCE_SELECTION_CODEC);
+  const selectedSourceFolders = includeSubfolders && sourceSelection.source === sourcePath ? sourceSelection.folders : null;
+  const selectedFileExtensions = includeSubfolders && sourceSelection.source === sourcePath ? sourceSelection.types : null;
+  const changeSelection = (folders: string[] | null, types: string[] | null) => setSourceSelection({source: sourcePath, folders, types});
+
   // ─── Rules, filters, and policy ─────────────────────────────────────────────
   const rules = useCategoryRules();
   const { categories, setCategories } = rules;
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [conflictResolution, setConflictResolution] = useState<ConflictResolution>("rename");
-  const [scheduleType, setScheduleType] = useState<ScheduleType>("manual");
-  const [scheduleTime, setScheduleTime] = useState("09:00");
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(() => new Date());
-  const [smartRenameEnabled, setSmartRenameEnabled] = useState(false);
+  // These settings are saved so rules, filters, and the schedule survive a restart.
+  const [filters, setFilters] = useSavedState<Filters>(STORAGE_KEYS.filters, DEFAULT_FILTERS, readFilters);
+  const [conflictResolution, setConflictResolution] = useSavedState<ConflictResolution>(STORAGE_KEYS.conflictResolution, "rename", readConflictResolution);
+  const [smartRenameEnabled, setSmartRenameEnabled] = useSavedState(STORAGE_KEYS.smartRename, false, readBoolean);
+  const [savedSchedule, setSavedSchedule] = useSavedState<SavedSchedule>(
+    STORAGE_KEYS.schedule,
+    () => ({ type: "manual", time: "09:00", date: new Date().toISOString() }),
+    readSchedule,
+  );
+  const [savedRuleSets, setSavedRuleSets] = useSavedState<RuleSet[]>(STORAGE_KEYS.ruleSets, [], readRuleSets);
+  const [watchEnabled, setWatchEnabled] = useSavedState(STORAGE_KEYS.watch, false, readBoolean);
+  const [watchStatus, setWatchStatus] = useState<{ watching: boolean; error?: string }>({ watching: false });
+  const scheduleType = savedSchedule.type;
+  const scheduleTime = savedSchedule.time;
+  const scheduleDate = useMemo(() => (savedSchedule.date ? new Date(savedSchedule.date) : undefined), [savedSchedule.date]);
+  const setScheduleType = useCallback((type: ScheduleType) => setSavedSchedule((previous) => ({ ...previous, type })), [setSavedSchedule]);
+  const setScheduleTime = useCallback((time: string) => setSavedSchedule((previous) => ({ ...previous, time })), [setSavedSchedule]);
+  const setScheduleDate = useCallback(
+    (date: Date | undefined) => setSavedSchedule((previous) => ({ ...previous, date: date ? date.toISOString() : null })),
+    [setSavedSchedule],
+  );
+  const [namingStyle, setNamingStyle] = usePersistentState<NamingStyle>(STORAGE_KEYS.namingStyle, "descriptive", NAMING_STYLE_CODEC);
 
   // ─── Chrome: search, panels, notices ────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,6 +120,8 @@ export default function App() {
   const [aiQuery, setAiQuery] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null);
+  const [aiReview, setAiReview] = useState<AiRuleReview | null>(null);
+  const [aiReviewError, setAiReviewError] = useState<string | null>(null);
 
   useSystemAccentColor();
   const isFullScreen = useFullScreen();
@@ -86,6 +131,9 @@ export default function App() {
     () => ({
       sourcePath,
       destPath,
+      includeSubfolders,
+      selectedSourceFolders,
+      selectedFileExtensions,
       categories,
       filters,
       conflictResolution,
@@ -99,6 +147,9 @@ export default function App() {
     [
       sourcePath,
       destPath,
+      includeSubfolders,
+      selectedSourceFolders,
+      selectedFileExtensions,
       categories,
       filters,
       conflictResolution,
@@ -108,21 +159,40 @@ export default function App() {
     ],
   );
 
-  const pythonScript = useMemo(() => generatePythonScript(config), [config]);
-
   const run = useOrganizerRun({
     config,
     smartRenameEnabled,
-    pythonScript,
+    namingStyle,
     onNotice: showNotice,
   });
 
   // Keep the main process's cron job in step with the configured schedule.
   useEffect(() => {
-    void window.electron?.saveSchedule?.(config);
+    const saving = window.electron?.saveSchedule?.(config);
+    if (!saving) return;
+    let current = true;
+    void saving.then(result => {
+      if (current && !result.success) showNotice(result.error ?? "Tidy could not save the schedule.");
+    }).catch(() => { if (current) showNotice("Tidy could not save the schedule."); });
+    return () => { current = false; };
   }, [config]);
 
-  const insightData = useFolderInsights(sourcePath);
+  // Keep the watched folder in step with the current rules and folders.
+  useEffect(() => window.electron?.onWatchStatus?.(setWatchStatus), []);
+
+  useEffect(() => {
+    if (!window.electron?.saveWatch) return;
+    let current = true;
+    window.electron
+      .saveWatch(config, watchEnabled)
+      .then((result) => current && setWatchStatus({ watching: result.watching, error: result.error }))
+      .catch(() => current && setWatchStatus({ watching: false, error: "Tidy could not watch the source folder." }));
+    return () => {
+      current = false;
+    };
+  }, [config, watchEnabled]);
+
+  const insightData = useFolderInsights(sourcePath, includeSubfolders, destPath, selectedSourceFolders, selectedFileExtensions);
   const { startPreview } = run;
   const insights = useMemo(
     () =>
@@ -133,6 +203,16 @@ export default function App() {
       }),
     [insightData, categories, startPreview],
   );
+
+  /** Extensions offered in the source file-type picker, most common first. */
+  const sourceFileExtensions = useMemo(() => {
+    const rank = (extension: string) => {
+      const index = COMMON_EXTENSIONS.indexOf(extension);
+      return index === -1 ? COMMON_EXTENSIONS.length : index;
+    };
+    return [...new Set(categories.filter((category) => category.enabled).flatMap((category) => category.extensions))]
+      .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  }, [categories]);
 
   /** Category ids matching the search box, or null when the search is empty. */
   const searchMatches = useMemo<Set<string> | null>(() => {
@@ -159,131 +239,96 @@ export default function App() {
     }
   }, [showNotice]);
 
+  /** The current rules, filters, and tools as a rule set. Folders are not included. */
+  const captureRuleSet = useCallback(
+    (name: string): RuleSet => ({
+      id: "",
+      name,
+      categories,
+      filters,
+      conflictResolution,
+      smartRenameEnabled,
+      namingStyle,
+      includeSubfolders,
+    }),
+    [categories, filters, conflictResolution, smartRenameEnabled, namingStyle, includeSubfolders],
+  );
+
+  const applyRuleSet = useCallback(
+    (set: RuleSet) => {
+      setCategories(set.categories.map((category) => ({ ...category, extensions: [...category.extensions] })));
+      setFilters(set.filters);
+      setConflictResolution(set.conflictResolution);
+      setSmartRenameEnabled(set.smartRenameEnabled);
+      setNamingStyle(set.namingStyle);
+      setIncludeSubfolders(set.includeSubfolders);
+    },
+    [setCategories, setFilters, setConflictResolution, setSmartRenameEnabled, setNamingStyle, setIncludeSubfolders],
+  );
+
   const resetRules = useCallback(() => {
     rules.reset();
     setFilters(DEFAULT_FILTERS);
     setSearchQuery("");
   }, [rules]);
 
-  /**
-   * Merge an AI-parsed rule into the current settings and report which paths,
-   * if any, it resolved.
-   *
-   * Shared by the inline command bar and the advanced rule builder, which
-   * differ only in what they do afterwards.
-   */
-  const applyAiPatch = useCallback(
-    (patch: AiRulePatch) => {
-      setCategories((current) => applyCategoryPatch(current, patch));
-      setFilters((current) => applyFilterPatch(current, patch));
-      if (typeof patch.smartRename === "boolean") setSmartRenameEnabled(patch.smartRename);
-
-      const nextSource = readPath(patch.sourcePath);
-      const nextDest = readPath(patch.destPath);
-      if (nextSource) setSourcePath(nextSource);
-      if (nextDest) setDestPath(nextDest);
-
-      return { nextSource, nextDest };
-    },
-    [setCategories, setSourcePath, setDestPath],
-  );
-
-  /** Send a natural-language rule to the parser and apply whatever comes back. */
-  const submitAiQuery = useCallback(async () => {
-    const query = aiQuery.trim();
-    if (!query || aiBusy) return;
-
-    if (!window.electron?.parseRule) {
-      setAiFeedback({ type: "error", message: "AI rules are only available in the desktop app." });
-      return;
-    }
-
+  /** Parsing only prepares a draft. Settings and schedules stay untouched here. */
+  const proposeAiRule = useCallback(async (instruction: string, origin: "inline" | "builder", turns: ClarificationTurn[] = []) => {
     setAiBusy(true);
     setAiFeedback(null);
+    setAiReviewError(null);
     try {
-      const result = await window.electron.parseRule(query, {
-        categories,
-        filters,
-        smartRenameEnabled,
-        sourcePath,
-        destPath,
-      });
-
-      if (!result.success || !result.data) {
-        setAiFeedback({
-          type: "error",
-          message: result.error || "AI couldn't process that. Try rephrasing.",
-        });
+      const initialQuestion = turns.length === 0 ? initialRuleQuestion(instruction) : null;
+      if (initialQuestion) {
+        setAiReview({ kind: "question", instruction, origin, turns, question: initialQuestion });
         return;
       }
-
-      const patch = result.data as AiRulePatch;
-      const { nextSource, nextDest } = applyAiPatch(patch);
-      setAiQuery("");
-
-      // The state update above has not flushed yet, so the run is started with
-      // the resolved path directly rather than reading it back from state.
-      const effectiveSource = nextSource ?? sourcePath;
-      if (patch.execute && effectiveSource) {
-        setAiFeedback({ type: "success", message: `Running organizer on ${effectiveSource}…` });
-        window.setTimeout(() => setAiFeedback(null), AI_FEEDBACK_TIMEOUT.running);
-        void startPreview(effectiveSource);
+      if (!window.electron?.parseRule) throw new Error("AI rules are only available in the desktop app.");
+      const result = await window.electron.parseRule(instruction, { categories, filters, smartRenameEnabled, sourcePath, destPath, includeSubfolders, clarifications: turns });
+      if (!result.success || !result.data) throw new Error(result.error || "AI couldn't process that. Try rephrasing.");
+      const patch = readRuleResponse(result.data);
+      const question = patch.clarification?.trim();
+      if (question) {
+        setAiReview({ kind: "question", instruction, origin, turns, question: question.slice(0, 1000) });
       } else {
-        const pathNote = nextSource || nextDest ? " Folders updated." : "";
-        setAiFeedback({
-          type: "success",
-          message: `Rules updated!${pathNote} Review your settings above.`,
-        });
-        window.setTimeout(() => setAiFeedback(null), AI_FEEDBACK_TIMEOUT.success);
+        setAiReview({ kind: "draft", instruction, origin, turns, draft: prepareRuleDraft(config, smartRenameEnabled, patch, namingStyle) });
       }
-    } catch {
-      setAiFeedback({
-        type: "error",
-        message: "Couldn't reach AI. Check that GEMINI_API_KEY is set.",
-      });
     } finally {
       setAiBusy(false);
     }
-  }, [
-    aiQuery,
-    aiBusy,
-    categories,
-    filters,
-    smartRenameEnabled,
-    sourcePath,
-    destPath,
-    applyAiPatch,
-    startPreview,
-  ]);
+  }, [categories, filters, smartRenameEnabled, sourcePath, destPath, includeSubfolders, config, namingStyle]);
 
-  /** The advanced rule builder applies rules but never runs them immediately. */
-  const submitBuilderRule = useCallback(
-    async (rule: string) => {
-      if (!window.electron?.parseRule) {
-        showNotice("The AI Rule Builder is only available in the desktop app.");
-        return;
-      }
-      try {
-        const result = await window.electron.parseRule(rule, {
-          categories,
-          filters,
-          smartRenameEnabled,
-        });
-        if (result.success && result.data) {
-          applyAiPatch(result.data as AiRulePatch);
-        } else {
-          showNotice(`AI was unable to process your rule: ${result.error ?? "unknown error"}`);
-        }
-      } catch {
-        showNotice("Error communicating with the AI parser. Make sure GEMINI_API_KEY is set.");
-      }
-    },
-    [categories, filters, smartRenameEnabled, applyAiPatch, showNotice],
-  );
+  const submitAiQuery = useCallback(async () => {
+    if (!aiQuery.trim() || aiBusy) return;
+    try { await proposeAiRule(aiQuery.trim(), "inline"); }
+    catch (error) { setAiFeedback({ type: "error", message: error instanceof Error ? error.message : "Couldn't reach AI. Please try again." }); }
+  }, [aiQuery, aiBusy, proposeAiRule]);
+
+  const confirmAiRule = () => {
+    if (aiReview?.kind !== "draft" || aiBusy) return;
+    const { draft, origin } = aiReview;
+    setCategories(draft.config.categories);
+    setFilters(draft.config.filters);
+    setSourcePath(draft.config.sourcePath);
+    setDestPath(draft.config.destPath);
+    setSmartRenameEnabled(draft.smartRenameEnabled);
+    setIncludeSubfolders(draft.config.includeSubfolders === true);
+    setAiReview(null);
+    setAiQuery("");
+    setAiFeedback({ type: "success", message: "Reviewed rules applied." });
+    window.setTimeout(() => setAiFeedback(null), AI_FEEDBACK_TIMEOUT.success);
+    if (origin === "inline" && draft.openPreview && draft.config.sourcePath) void startPreview(draft.config.sourcePath, draft.config, draft.smartRenameEnabled);
+  };
+
+  const clarifyAiRule = async (answer: string) => {
+    if (aiReview?.kind !== "question" || aiBusy) return;
+    try { await proposeAiRule(aiReview.instruction, aiReview.origin, [...aiReview.turns, { question: aiReview.question, answer }]); }
+    catch (error) { setAiReviewError(error instanceof Error ? error.message : "Couldn't reach AI. Your settings haven't changed."); }
+  };
 
   const operations = run.runMetrics.operations ?? [];
   const anyPanelOpen =
-    run.previewOpen || ruleBuilderOpen || insightsOpen || auditLogOpen || notice !== null;
+    run.previewOpen || ruleBuilderOpen || aiReview !== null || insightsOpen || auditLogOpen || notice !== null;
 
   useMenuActions({
     "open-preferences": () => window.dispatchEvent(new CustomEvent("tidy:open-preferences")),
@@ -304,15 +349,14 @@ export default function App() {
     {
       onRun: () => void startPreview(),
       onUndo: () => void run.undo(operations),
-      onOpenAuditLog: () => setAuditLogOpen((open) => !open),
     },
     { isModalOpen: anyPanelOpen, canUndo: operations.length > 0 },
   );
 
   return (
     <div
-      className="h-screen overflow-hidden relative selection:bg-[var(--system-blue)]/30 selection:text-white bg-[var(--mac-window-background)] text-foreground"
-      style={{ fontFamily: "var(--font-sf)" }}
+      className="fluent-app h-screen overflow-hidden relative selection:bg-[var(--system-blue)]/30 selection:text-white bg-[var(--fluent-window-background)] text-foreground"
+      style={{ fontFamily: "var(--font-ui)" }}
     >
       <a href="#main-content" className="skip-to-main">
         Skip to main content
@@ -356,14 +400,22 @@ export default function App() {
 
       <main
         id="main-content"
-        tabIndex={-1}
-        className="h-full w-full overflow-auto scroll-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mac-focus-ring)]"
+        tabIndex={0}
+        className="h-full w-full overflow-auto scroll-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fluent-focus-ring)]"
       >
         {/* Top padding clears the floating top bar; bottom padding clears the status bar. */}
-        <div className="w-full px-5 lg:px-10 xl:px-16 pt-16 pb-44 flex flex-col gap-6">
+        <div className="fluent-page">
+          <div className="fluent-page-intro"><h1>Organize files</h1><p>Choose your folders, set your rules, and preview changes before you run.</p></div>
           <LocationsSection
             sourcePath={sourcePath}
             destPath={destPath}
+            includeSubfolders={includeSubfolders}
+            onIncludeSubfoldersChange={setIncludeSubfolders}
+            selectedSourceFolders={selectedSourceFolders}
+            selectedFileExtensions={selectedFileExtensions}
+            onSelectionChange={changeSelection}
+            fileExtensions={sourceFileExtensions}
+            excludeHidden={filters.excludeHidden}
             onSourceChange={setSourcePath}
             onDestChange={setDestPath}
             onBrowse={browseForFolder}
@@ -380,14 +432,22 @@ export default function App() {
             expandedIds={rules.expandedIds}
             enabledCount={rules.enabledCount}
             searchMatches={searchMatches}
-            searchQuery={searchQuery}
             smartRenameEnabled={smartRenameEnabled}
+            namingStyle={namingStyle}
+            onNamingStyleChange={setNamingStyle}
             onSmartRenameToggle={() => setSmartRenameEnabled((enabled) => !enabled)}
             onToggleFeatureForAll={rules.toggleFeatureForAll}
             onToggleExpanded={rules.toggleExpanded}
             onPatchCategory={rules.updateCategory}
             onToggleExtension={rules.toggleExtension}
-          />
+          >
+            <RuleSetsBar
+              savedSets={savedRuleSets}
+              onSavedSetsChange={setSavedRuleSets}
+              captureCurrent={captureRuleSet}
+              onApply={applyRuleSet}
+            />
+          </RulesSection>
 
           <AiCommandBar
             value={aiQuery}
@@ -412,11 +472,15 @@ export default function App() {
             onScheduleDateChange={setScheduleDate}
             conflictResolution={conflictResolution}
             onConflictResolutionChange={setConflictResolution}
+            watchEnabled={watchEnabled}
+            onWatchEnabledChange={setWatchEnabled}
+            watchStatus={watchStatus}
+            canWatch={Boolean(sourcePath && destPath)}
           />
         </div>
       </main>
 
-      <footer className="absolute bottom-0 left-0 right-0 z-30 bg-background/80 backdrop-blur-xl border-t border-black/[0.08] dark:border-white/[0.08] px-6 py-2">
+      <footer className="fluent-status">
         <StatusBar runState={run.runState} metrics={run.runMetrics} logEvents={run.logEvents} />
       </footer>
 
@@ -424,6 +488,7 @@ export default function App() {
         isOpen={run.previewOpen}
         onClose={run.closePreview}
         onConfirm={run.confirmRun}
+        onUndo={operations => run.undo(operations, false)}
         categories={categories}
         runState={run.runState}
         runMetrics={run.runMetrics}
@@ -435,7 +500,17 @@ export default function App() {
       <NaturalLanguageRuleBuilder
         isOpen={ruleBuilderOpen}
         onClose={() => setRuleBuilderOpen(false)}
-        onSave={submitBuilderRule}
+        onSave={rule => proposeAiRule(rule, "builder")}
+      />
+
+      <AiRuleReviewDialog
+        key={aiReview ? `${aiReview.instruction}-${aiReview.kind}-${aiReview.turns.length}` : "closed"}
+        review={aiReview}
+        busy={aiBusy}
+        error={aiReviewError}
+        onCancel={() => { setAiReview(null); setAiReviewError(null); }}
+        onClarify={answer => void clarifyAiRule(answer)}
+        onConfirm={confirmAiRule}
       />
 
       <InsightsSidebar
@@ -451,6 +526,8 @@ export default function App() {
         lastRunTime={run.runMetrics.timestamp}
         onUndo={run.undo}
         isUndoing={run.isUndoing}
+        destPath={destPath}
+        onRunUndone={run.syncUndoneRun}
       />
 
       <NoticeDialog
@@ -461,7 +538,6 @@ export default function App() {
         message={notice ?? ""}
       />
 
-      <Toaster position="top-center" richColors />
     </div>
   );
 }

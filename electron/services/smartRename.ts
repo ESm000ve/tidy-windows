@@ -9,7 +9,9 @@
 import { promises as fsp } from "node:fs";
 import path from "node:path";
 import type { FileForRename, RenameSuggestion } from "../types";
-import { GEMINI_MODEL, createClient } from "./gemini";
+import { createClient, generateContent } from "./gemini";
+import { validatePathSegment } from "../lib/files";
+import { applyNamingStyle, normalizeNamingStyle, type NamingStyle } from "../../src/shared/naming";
 
 /**
  * Largest file sent inline to the model. Above this the filename alone is used:
@@ -64,10 +66,10 @@ const HEURISTICS: {
   confidence: RenameSuggestion["confidence"];
   subfolder: string;
   reason: string;
-  rename: (stem: string, extension: string, today: string) => string;
+  rename: (stem: string, extension: string) => string;
 }[] = [
   {
-    // macOS screenshots: "Screen Shot 2024-01-01 at 10.30.00".
+    // Recognize imported screenshots: "Screen Shot 2024-01-01 at 10.30.00".
     test: /^Screen\s?shot\s+(.+)$/i,
     confidence: "high",
     subfolder: "Screenshots",
@@ -85,35 +87,35 @@ const HEURISTICS: {
     confidence: "medium",
     subfolder: "Photos",
     reason: "Standardized camera image name",
-    rename: (stem, extension, today) => `${today}_Capture_${stem}${extension}`,
+    rename: (stem, extension) => `Capture_${stem}${extension}`,
   },
   {
     test: /^(Document|Scan|Untitled|New Document|Report|Draft)_?\d*/i,
     confidence: "medium",
     subfolder: "Documents",
-    reason: "Prepend date to generic document",
-    rename: (stem, extension, today) => `${today}_Doc_${stem}${extension}`,
+    reason: "Clean up a generic document name",
+    rename: (stem, extension) => `Doc_${stem}${extension}`,
   },
   {
     test: /^(Voice|Track|Audio|Rec|Recording)_?\d+/i,
     confidence: "medium",
     subfolder: "Audio",
     reason: "Standardized audio recording name",
-    rename: (stem, extension, today) => `${today}_Audio_${stem}${extension}`,
+    rename: (stem, extension) => `Audio_${stem}${extension}`,
   },
   {
     test: /^(MOV|VID|VIDEO|Clip)_?\d+/i,
     confidence: "medium",
     subfolder: "Video",
     reason: "Standardized video name",
-    rename: (stem, extension, today) => `${today}_Video_${stem}${extension}`,
+    rename: (stem, extension) => `Video_${stem}${extension}`,
   },
   {
     test: /^(File|Download|Data|Export|Backup)_?\d*/i,
     confidence: "low",
     subfolder: "Other",
-    reason: "Prepend date to generic download/export",
-    rename: (stem, extension, today) => `${today}_${stem}${extension}`,
+    reason: "Clean up a generic download name",
+    rename: (stem, extension) => `Download_${stem}${extension}`,
   },
 ];
 
@@ -123,8 +125,7 @@ const HEURISTICS: {
  * Files that already have a human-chosen name are left alone — no suggestion is
  * better than a worse name.
  */
-export function suggestRenamesLocally(files: FileForRename[]): Record<string, RenameSuggestion> {
-  const today = new Date().toISOString().split("T")[0];
+export function suggestRenamesLocally(files: FileForRename[], style: NamingStyle = "descriptive"): Record<string, RenameSuggestion> {
   const suggestions: Record<string, RenameSuggestion> = {};
 
   for (const file of files) {
@@ -135,8 +136,9 @@ export function suggestRenamesLocally(files: FileForRename[]): Record<string, Re
     if (!rule) continue;
 
     suggestions[file.id] = {
-      suggested: rule.rename(stem, extension, today),
-      reason: rule.reason,
+      source: "local",
+      suggested: applyNamingStyle(rule.rename(stem, extension), style, file.modifiedMs),
+      reason: style === "date-first" && Number.isFinite(file.modifiedMs) ? `${rule.reason}; date from the file's last modified time` : rule.reason,
       confidence: rule.confidence,
       subfolder: rule.subfolder,
     };
@@ -145,10 +147,36 @@ export function suggestRenamesLocally(files: FileForRename[]): Record<string, Re
   return suggestions;
 }
 
+/** One suggestion, as the model must return it. */
+const SUGGESTION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    suggested: { type: "string" },
+    reason: { type: "string" },
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+    subfolder: { type: "string" },
+  },
+  required: ["suggested", "reason", "confidence"],
+};
+
+/**
+ * A response schema keyed by this batch's file IDs, so the model cannot invent
+ * or drop entries and every value has the expected shape. The output is still
+ * validated afterwards; the schema just makes malformed replies rare.
+ */
+function renameSchema(files: FileForRename[]) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: Object.fromEntries(files.map((file) => [file.id, SUGGESTION_SCHEMA])),
+  };
+}
+
 /** Build the multimodal request body, inlining file contents where practical. */
-async function buildRequestParts(files: FileForRename[]) {
+async function buildRequestParts(files: FileForRename[], style: NamingStyle) {
   const parts: ({ text: string } | { inlineData: { data: string; mimeType: string } })[] = [
-    { text: PROMPT },
+    { text: `${PROMPT}\nNaming preference: ${style === "date-first" ? "Date first. Suggest a descriptive name; the app will prepend the file's last modified date locally. Do not invent or add a date." : "Descriptive. Use a concise, meaningful name. Do not prepend today's date."}` },
   ];
 
   for (const file of files) {
@@ -179,19 +207,58 @@ async function buildRequestParts(files: FileForRename[]) {
  */
 export async function suggestRenames(
   files: FileForRename[],
+  namingStyle: NamingStyle = "descriptive",
 ): Promise<Record<string, RenameSuggestion>> {
+  const style = normalizeNamingStyle(namingStyle);
   const client = createClient();
-  if (!client) return suggestRenamesLocally(files);
+  if (!client) return suggestRenamesLocally(files, style);
 
   try {
-    const response = await client.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: await buildRequestParts(files),
-      config: { responseMimeType: "application/json" },
+    const response = await generateContent(client, {
+      contents: await buildRequestParts(files, style),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: renameSchema(files),
+        // Naming from a picture or a page is a description task; extended
+        // reasoning adds seconds per batch without better names.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
-    return JSON.parse(response.text || "{}") as Record<string, RenameSuggestion>;
+    const suggestions = validateRenameSuggestions(files, JSON.parse(response.text || "{}"));
+    for (const file of files) {
+      const suggestion = suggestions[file.id];
+      if (suggestion) suggestion.suggested = applyNamingStyle(suggestion.suggested, style, file.modifiedMs);
+    }
+    return suggestions;
   } catch (error) {
-    console.error("Smart Rename request failed; falling back to local heuristics.", error);
-    return suggestRenamesLocally(files);
+    console.warn("Smart Rename request failed; falling back to local heuristics.");
+    return suggestRenamesLocally(files, style);
   }
+}
+
+/** Model output is untrusted, including when it looks like valid JSON. */
+export function validateRenameSuggestions(files: FileForRename[], value: unknown, source: "ai" | "local" = "ai"): Record<string, RenameSuggestion> {
+  const result: Record<string, RenameSuggestion> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  for (const file of files) {
+    const candidate = (value as Record<string, unknown>)[file.id];
+    if (!candidate || typeof candidate !== "object") continue;
+    const raw = candidate as Record<string, unknown>;
+    if (typeof raw.suggested !== "string" || raw.suggested.length > 255 || path.extname(raw.suggested) !== path.extname(file.name)) continue;
+    try {
+      const suggested = validatePathSegment(raw.suggested);
+      let subfolder: string | undefined;
+      if (typeof raw.subfolder === "string" && raw.subfolder.length <= 100) {
+        try { subfolder = validatePathSegment(raw.subfolder); } catch { /* Ignore an invalid folder suggestion. */ }
+      }
+      result[file.id] = {
+        source,
+        suggested,
+        reason: typeof raw.reason === "string" ? raw.reason.slice(0, 400) : "Suggested from the file name or contents",
+        confidence: raw.confidence === "high" || raw.confidence === "low" ? raw.confidence : "medium",
+        subfolder,
+      };
+    } catch { /* Keep the original name when the proposed name is invalid. */ }
+  }
+  return result;
 }

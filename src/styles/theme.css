@@ -49,18 +49,6 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* macOS Semantic System Colors */
-  --system-blue: #007AFF;
-  --system-green: #34C759;
-  --system-red: #FF3B30;
-  --system-yellow: #FFCC00;
-  --system-orange: #FF9500;
-  --system-purple: #AF52DE;
-  --mac-label: #000000;
-  --mac-secondary-label: rgba(60, 60, 67, 0.6);
-  --mac-window-background: #ececec;
-  --mac-focus-ring: var(--system-blue);
-  --mac-toggle-off: #e5e5ea;
 }
 
 .dark {
@@ -99,18 +87,6 @@
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
 
-  /* macOS Semantic System Colors (Dark Mode) */
-  --system-blue: #0A84FF;
-  --system-green: #32D74B;
-  --system-red: #FF453A;
-  --system-yellow: #FFD60A;
-  --system-orange: #FF9F0A;
-  --system-purple: #BF5AF2;
-  --mac-label: #FFFFFF;
-  --mac-secondary-label: rgba(255, 255, 255, 0.5);
-  --mac-window-background: #1e1e1e;
-  --mac-focus-ring: var(--system-blue);
-  --mac-toggle-off: #3a3a3c;
 }
 
 @theme inline {
@@ -159,14 +135,14 @@
   --color-system-yellow: var(--system-yellow);
   --color-system-orange: var(--system-orange);
   --color-system-purple: var(--system-purple);
-  --color-mac-label: var(--mac-label);
-  --color-mac-secondary-label: var(--mac-secondary-label);
-  --color-mac-window-background: var(--mac-window-background);
-  --color-mac-focus-ring: var(--mac-focus-ring);
-  --color-mac-toggle-off: var(--mac-toggle-off);
+  --color-fluent-label: var(--fluent-label);
+  --color-fluent-secondary-label: var(--fluent-secondary-label);
+  --color-fluent-window-background: var(--fluent-window-background);
+  --color-fluent-focus-ring: var(--fluent-focus-ring);
+  --color-fluent-toggle-off: var(--fluent-toggle-off);
   
   /* Font Family override to prioritize San Francisco */
-  --font-sans: var(--font-sf);
+  --font-sans: var(--font-ui);
 }
 
 @layer base {
@@ -176,7 +152,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-sf);
+    font-family: var(--font-ui);
     font-size: 13px;
     line-height: 1.25;
     letter-spacing: -0.08px;
@@ -243,11 +219,11 @@
 
 @media (prefers-contrast: more) {
   :root {
-    --mac-window-background: #ffffff;
+    --fluent-window-background: #ffffff;
     --border: rgba(0, 0, 0, 1);
   }
   .dark {
-    --mac-window-background: #000000;
+    --fluent-window-background: #000000;
     --border: rgba(255, 255, 255, 1);
   }
 
@@ -259,15 +235,15 @@
 }
 
 @layer utilities {
-  .mac-glass {
+  .fluent-glass {
     @apply bg-white/70 dark:bg-[#1e1e1e]/70 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-sm;
   }
   
-  .mac-panel {
-    @apply bg-mac-window-background border border-border shadow-md rounded-[10px];
+  .fluent-panel {
+    @apply bg-fluent-window-background border border-border shadow-md rounded-lg;
   }
   
-  .mac-focus {
-    @apply focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-mac-focus-ring/50 focus-visible:border-mac-focus-ring;
+  .fluent-focus {
+    @apply focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-fluent-focus-ring/50 focus-visible:border-fluent-focus-ring;
   }
 }

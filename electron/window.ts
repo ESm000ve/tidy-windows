@@ -11,7 +11,7 @@ export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 /** Window background colours, matched to the renderer's theme tokens so there
  *  is no light/dark flash between the window appearing and React painting. */
-const BACKGROUND = { dark: "#1E1E1E", light: "#ECECEC" } as const;
+const BACKGROUND = { dark: "#202020", light: "#F3F3F3" } as const;
 
 const WINDOW_SIZE = { width: 1024, height: 768, minWidth: 800, minHeight: 600 } as const;
 
@@ -34,26 +34,48 @@ export function sendToRenderer(channel: string, ...args: unknown[]): void {
   mainWindow?.webContents.send(channel, ...args);
 }
 
-/** Create the application window and load the renderer into it. */
-export function createWindow(rendererDist: string): BrowserWindow {
+/** The app icon on disk, for the window and the notification-area icon. */
+export function appIconPath(): string {
+  return path.join(MAIN_DIR, VITE_DEV_SERVER_URL ? "../assets/icon.png" : "../build/icon.png");
+}
+
+/** Bring the window to the front, restoring it from the tray or taskbar. */
+export function showMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+/**
+ * Create the application window and load the renderer into it.
+ *
+ * With `show: false` the page still loads (and arms any saved schedule) while
+ * the window stays hidden in the notification area.
+ */
+export function createWindow(rendererDist: string, { show = true }: { show?: boolean } = {}): BrowserWindow {
   mainWindow = new BrowserWindow({
     ...WINDOW_SIZE,
-    titleBarStyle: "hiddenInset",
-    acceptFirstMouse: true,
+    show,
+    title: "Tidy",
+    titleBarStyle: "default",
+    autoHideMenuBar: process.platform === "win32",
+    icon: appIconPath(),
     backgroundColor: backgroundForAppearance(),
     webPreferences: {
       preload: path.join(MAIN_DIR, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      // The preload script uses Node built-ins, which the sandbox would block.
-      // Context isolation still keeps the renderer off Node entirely.
-      sandbox: false,
+      sandbox: true,
     },
   });
 
-  nativeTheme.on("updated", () => {
-    mainWindow?.setBackgroundColor(backgroundForAppearance());
-  });
+  // App content never needs to navigate to an external page or open popups.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", event => event.preventDefault());
+
+  const updateAppearance = () => mainWindow?.setBackgroundColor(backgroundForAppearance());
+  nativeTheme.on("updated", updateAppearance);
 
   if (VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(VITE_DEV_SERVER_URL);
@@ -61,11 +83,12 @@ export function createWindow(rendererDist: string): BrowserWindow {
     void mainWindow.loadFile(path.join(rendererDist, "index.html"));
   }
 
-  // The renderer insets its top bar for the macOS traffic lights, which move
+  // The renderer insets its top bar for full screen changes
   // when the window enters full screen.
   mainWindow.on("enter-full-screen", () => sendToRenderer(CHANNELS.fullScreenChange, true));
   mainWindow.on("leave-full-screen", () => sendToRenderer(CHANNELS.fullScreenChange, false));
   mainWindow.on("closed", () => {
+    nativeTheme.removeListener("updated", updateAppearance);
     mainWindow = null;
   });
 

@@ -1,0 +1,18 @@
+const page=await figma.getNodeByIdAsync(L.entities.pages.cover);await figma.setCurrentPageAsync(page);
+if(page.children.length)throw new Error('Cover already populated');
+const b=box(page,'Tidy · design system cover',1440,'surface/window','VERTICAL',48,24);b.x=80;b.y=80;b.resize(1440,900);b.layoutSizingVertical='FIXED';
+await text(b,'TIDY / WINDOWS 11 / DESIGN SYSTEM V1','Caption','accent/fill',1344);
+await text(b,'Tidy / Windows design system','Portfolio display','text/primary',1344);
+await text(b,'Familiar controls. Explicit decisions. Recoverable file organization.','Section','text/secondary',1344);
+const r=row(b,'System introduction',1344,24);
+const left=box(r,'Purpose and navigation',672,null,'VERTICAL',0,20);
+await text(left,'A practical system for a small utility with high-trust tasks.','Page title','text/primary',648);
+await text(left,'Define the scope, review the plan, confirm the changes, then recover with Undo. Optional AI supports the task; the user stays in control.','Body','text/secondary',648);
+for(const [title,copy]of [['Foundations → controls','23 semantic colors, Light/Dark modes, compact geometry and a restrained type ramp.'],['Controls → product patterns','Reusable variants for file scope, AI interpretation and preview decisions.'],['Patterns → evidence','Keyboard and contrast criteria, tested behaviors, and clearly stated limitations.']])await note(left,title,copy);
+const right=box(r,'Dark appearance example',648,'surface/layer','VERTICAL',24,16);mode(right,'Dark');radius(right,'radius/container');await text(right,'A second decision before files move','Body strong','text/primary',600);
+const dialog=await instance(right,await figma.getNodeByIdAsync(L.entities.patterns.variants['AI rule dialog'][0]));dialog.rescale(.78);
+await text(right,'AI rule review / Dark mode / Editable component instance','Caption','text/secondary',600);
+line(b,1344);
+await text(b,'01 Foundations   /   02 Buttons & fields   /   03 Selection & status   /   04 Workflows   /   05 Accessibility & governance   /   06 Portfolio story','Caption','text/secondary',1344);
+await text(b,'Based on Tidy 1.0.1 · Portfolio library, November 2026 · Segoe UI specifications; Inter fallback in this Figma file · Source-aligned v1, with proposed governance clearly labeled.','Caption','text/secondary',1344);
+await b.screenshot({scale:.75});return{createdNodeIds:made,board:evidence(b),coverage:'Foundations, controls, patterns, accessibility, governance and case study'};

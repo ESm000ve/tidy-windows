@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 /**
  * `useState` that mirrors its value into `localStorage`.
@@ -54,4 +54,43 @@ export function usePersistentState<T>(
   );
 
   return [value, update];
+}
+
+/**
+ * `useState` saved to `localStorage` as JSON, for settings that should survive
+ * a restart.
+ *
+ * Unlike {@link usePersistentState}, the stored value is read synchronously on
+ * first render, so effects that depend on it (such as arming the schedule) see
+ * the saved settings immediately rather than the defaults first. Functional
+ * updates are supported. `validate` receives the parsed JSON and returns a
+ * usable value, or `undefined` to fall back to `initial`.
+ */
+export function useSavedState<T>(
+  key: string,
+  initial: T | (() => T),
+  validate: (raw: unknown) => T | undefined,
+): [T, Dispatch<SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw !== null) {
+        const valid = validate(JSON.parse(raw));
+        if (valid !== undefined) return valid;
+      }
+    } catch {
+      // Corrupt or unavailable storage: use the default.
+    }
+    return typeof initial === "function" ? (initial as () => T)() : initial;
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Quota exceeded or storage disabled: keep the in-memory value.
+    }
+  }, [key, value]);
+
+  return [value, setValue];
 }

@@ -1,0 +1,138 @@
+{
+  "systemVersion": "1.0.0",
+  "families": [
+    {
+      "name": "Button",
+      "variants": 10,
+      "source": "src/styles/windows.css",
+      "code": ".fluent-button / .fluent-primary",
+      "properties": [
+        "Hierarchy",
+        "State",
+        "Label",
+        "Show icon",
+        "Icon"
+      ],
+      "contract": "One primary action per decision; keyboard focus is distinct from selection."
+    },
+    {
+      "name": "Text field",
+      "variants": 4,
+      "source": "src/styles/windows.css",
+      "code": ".fluent-textbox",
+      "properties": [
+        "State",
+        "Label",
+        "Value"
+      ],
+      "contract": "Keep a persistent label. Explain errors next to the field."
+    },
+    {
+      "name": "Select",
+      "variants": 4,
+      "source": "src/app/components/controls/FluentSelect.tsx",
+      "code": "FluentSelect",
+      "properties": [
+        "State",
+        "Label",
+        "Value"
+      ],
+      "contract": "Bounded options; arrow navigation, Enter selection, Escape dismissal."
+    },
+    {
+      "name": "Switch",
+      "variants": 6,
+      "source": "src/app/components/controls/FluentToggle.tsx",
+      "code": "FluentToggle",
+      "properties": [
+        "Checked",
+        "State"
+      ],
+      "contract": "Immediate setting change; 40×20 track inside a 44×32 target."
+    },
+    {
+      "name": "Checkbox",
+      "variants": 6,
+      "source": "src/app/components/sections/SourceChoices.tsx",
+      "code": "SourceChoices",
+      "properties": [
+        "Checked",
+        "State",
+        "Label"
+      ],
+      "contract": "Membership; the full label row is clickable. Clear means None."
+    },
+    {
+      "name": "Radio choice",
+      "variants": 4,
+      "source": "src/app/components/BottomPanel.tsx",
+      "code": "Frequency radiogroup",
+      "properties": [
+        "Checked",
+        "Focus",
+        "Label"
+      ],
+      "contract": "One active choice. Arrows wrap; Home and End reach the edges."
+    },
+    {
+      "name": "Tool chip",
+      "variants": 3,
+      "source": "src/styles/windows.css",
+      "code": ".fluent-chip",
+      "properties": [
+        "State",
+        "Label"
+      ],
+      "contract": "Use aria-pressed. This changes capability without running a job."
+    },
+    {
+      "name": "Confidence badge",
+      "variants": 3,
+      "source": "src/app/components/PreviewSheet.tsx",
+      "code": "FileRow confidence",
+      "properties": [
+        "Confidence"
+      ],
+      "contract": "High, Medium and Low qualify a suggestion; text carries the meaning."
+    },
+    {
+      "name": "Folder card",
+      "variants": 3,
+      "source": "src/app/components/FolderCard.tsx",
+      "code": "FolderCard",
+      "properties": [
+        "State",
+        "Label",
+        "Path or hint"
+      ],
+      "contract": "Choosing a source or destination changes scope, not files."
+    },
+    {
+      "name": "AI rule dialog",
+      "variants": 2,
+      "source": "src/app/components/AiRuleReviewDialog.tsx",
+      "code": "AiRuleReviewDialog",
+      "properties": [
+        "Stage"
+      ],
+      "contract": "Clarify, review, then apply settings. File moves still require preview confirmation."
+    },
+    {
+      "name": "Preview row",
+      "variants": 4,
+      "source": "src/app/components/PreviewSheet.tsx",
+      "code": "FileRow",
+      "properties": [
+        "Source"
+      ],
+      "contract": "Show original identity, destination and attribution; Figma is an anatomy specimen."
+    }
+  ],
+  "variantCount": 49,
+  "limits": [
+    "Figma Inter fallback",
+    "Preview rows are anatomy specimens",
+    "Disabled tool and selection states are design specifications",
+    "No published Code Connect registration"
+  ]
+}

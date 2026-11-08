@@ -5,7 +5,7 @@
  * which of those are worth surfacing, given the rules the user has enabled.
  */
 import { Copy, Document, Folder, Music, PhotoFill } from "../components/icons";
-import type { Category } from "./generateScript";
+import type { Category } from "../types";
 import type { InsightData, InsightGroup, InsightItem } from "../types";
 
 interface BuildInsightsOptions {

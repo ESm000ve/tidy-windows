@@ -1,36 +1,29 @@
-name: CI
-
+name: Windows verification
+permissions:
+  contents: read
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-        env:
-          # The Electron binary is only needed to run the desktop app, not to
-          # type-check or build the renderer.
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Build
-        run: npm run build
-
-      - name: Install browser for the smoke test
-        run: npx playwright install --with-deps chromium
-
-      - name: Smoke test
-        run: npm test
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run verify
+      - run: npm run check:publish -- --history --build
+      - run: node scripts/prepare-windows.mjs
+      - run: npx electron-builder --win nsis --x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tidy-Windows
+          path: release/*Setup.exe

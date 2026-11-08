@@ -3,17 +3,21 @@
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { promises as fsp } from "node:fs";
 import path from "node:path";
 import {
   abbreviateHome,
   buildExtensionMap,
-  fingerprintFile,
+  DuplicateFinder,
   formatBytes,
+  passesFilters,
+  walkSourceFiles,
+  type SourceScanOptions,
 } from "../lib/files";
 import { cacheKey, getCachedRename, saveRenameCache, setCachedRename } from "./renameCache";
 import { suggestRenames } from "./smartRename";
-import type { CategoryRule, FileForRename, PreviewEntry, RenameSuggestion } from "../types";
+import { getApiKey } from "./gemini";
+import { normalizeNamingStyle, type NamingStyle } from "../../src/shared/naming";
+import type { CategoryRule, FileForRename, PreviewEntry, RenameSuggestion, RunFilters } from "../types";
 
 /**
  * Preview is capped so a folder with thousands of files still opens promptly.
@@ -28,34 +32,26 @@ const RENAME_BATCH_SIZE = 10;
 async function collectEntries(
   sourcePath: string,
   categories: CategoryRule[],
+  filters: RunFilters,
+  scope: SourceScanOptions,
 ): Promise<PreviewEntry[]> {
-  const extensionMap = buildExtensionMap(categories);
-  const seenFingerprints = new Map<string, string>();
+  const extensionMap = buildExtensionMap(categories, { enabledOnly: true });
+  const duplicates = new DuplicateFinder<string>();
   const entries: PreviewEntry[] = [];
 
-  const directory = await fsp.opendir(sourcePath);
-  for await (const dirent of directory) {
-    if (!dirent.isFile() || dirent.name.startsWith(".")) continue;
-
-    const filename = dirent.name;
-    const fullPath = path.join(sourcePath, filename);
-    const stats = await fsp.stat(fullPath);
+  for await (const file of walkSourceFiles(sourcePath, { ...scope, excludeHidden: filters.excludeHidden })) {
+    const { name: filename, path: fullPath, stats } = file;
     const extension = path.extname(filename).toLowerCase();
     const category = extensionMap.get(extension);
+    if (!category || !passesFilters(stats, filename, filters)) continue;
 
     let isDuplicate = false;
     let duplicateOf: string | undefined;
 
-    if (category?.duplicateDetection && stats.size > 0) {
+    if (category.duplicateDetection) {
       try {
-        const fingerprint = await fingerprintFile(fullPath, stats.size);
-        const original = seenFingerprints.get(fingerprint);
-        if (original) {
-          isDuplicate = true;
-          duplicateOf = original;
-        } else {
-          seenFingerprints.set(fingerprint, filename);
-        }
+        duplicateOf = await duplicates.check(fullPath, stats.size, file.relativePath);
+        isDuplicate = duplicateOf !== undefined;
       } catch (error) {
         // An unreadable file is simply not compared; it still appears in the list.
         console.warn(`Could not fingerprint ${filename}.`, error);
@@ -65,12 +61,15 @@ async function collectEntries(
     entries.push({
       id: crypto.randomUUID(),
       name: filename,
+      relativePath: file.relativePath,
       ext: extension.slice(1),
       size: formatBytes(stats.size),
       sizeBytes: stats.size,
-      from: abbreviateHome(sourcePath),
+      from: abbreviateHome(path.dirname(fullPath)),
       path: fullPath,
       category: (category?.name ?? "Other").toLowerCase(),
+      categoryId: category.id,
+      modifiedMs: stats.mtimeMs,
       needsReview: false,
       isDuplicate,
       duplicateOf,
@@ -86,17 +85,18 @@ async function collectEntries(
  * Attach AI rename suggestions to the entries, reusing cached results and
  * requesting the rest in concurrent batches.
  */
-async function attachRenameSuggestions(entries: PreviewEntry[]): Promise<void> {
+async function attachRenameSuggestions(entries: PreviewEntry[], style: NamingStyle): Promise<void> {
   const suggestions: Record<string, RenameSuggestion> = {};
   const pending: (FileForRename & { key: string })[] = [];
+  const online = !!getApiKey();
 
   for (const entry of entries) {
-    const key = cacheKey(entry.name, entry.sizeBytes);
+    const key = cacheKey(entry.path, entry.sizeBytes, entry.modifiedMs, style);
     const cached = getCachedRename(key);
-    if (cached) {
+    if (cached && (!online || cached.source === "ai")) {
       suggestions[entry.id] = cached;
     } else {
-      pending.push({ id: entry.id, name: entry.name, path: entry.path, size: entry.sizeBytes, key });
+      pending.push({ id: entry.id, name: entry.name, path: entry.path, size: entry.sizeBytes, modifiedMs: entry.modifiedMs, key });
     }
   }
 
@@ -105,7 +105,7 @@ async function attachRenameSuggestions(entries: PreviewEntry[]): Promise<void> {
     for (let index = 0; index < pending.length; index += RENAME_BATCH_SIZE) {
       const batch = pending.slice(index, index + RENAME_BATCH_SIZE);
       batches.push(
-        suggestRenames(batch).then((batchSuggestions) => {
+        suggestRenames(batch, style).then((batchSuggestions) => {
           for (const [fileId, suggestion] of Object.entries(batchSuggestions)) {
             suggestions[fileId] = suggestion;
             const source = batch.find((file) => file.id === fileId);
@@ -121,38 +121,37 @@ async function attachRenameSuggestions(entries: PreviewEntry[]): Promise<void> {
   for (const entry of entries) {
     const suggestion = suggestions[entry.id];
     // A suggestion identical to the current name is not worth showing.
-    if (!suggestion || suggestion.suggested === entry.name) continue;
+    if (!suggestion || (suggestion.suggested === entry.name && !suggestion.subfolder)) continue;
     entry.smartRename = {
+      source: suggestion.source,
       suggested: suggestion.suggested,
       reason: suggestion.reason || "AI generated suggestion",
       confidence: suggestion.confidence || "medium",
       subfolder: suggestion.subfolder,
     };
-    entry.classSource = "ai";
+    entry.classSource = suggestion.source === "local" ? "metadata" : "ai";
   }
 }
 
 /**
  * Scan a folder and return what the preview sheet should show.
  *
- * Returns an empty list rather than throwing when the folder is missing or
- * unreadable: an empty preview is a clearer outcome than an error dialog.
+ * Missing or unreadable folders throw so the UI can distinguish an error from
+ * an empty folder. Only matching rules and filters enter the preview or AI call.
  */
 export async function buildPreview(
   sourcePath: string,
   categories: CategoryRule[],
   smartRenameEnabled = false,
+  filters: RunFilters = { dateModified: "any", fileSize: "any", excludeHidden: false },
+  namingStyle: NamingStyle = "descriptive",
+  scope: SourceScanOptions = {},
 ): Promise<PreviewEntry[]> {
-  if (!sourcePath || !fs.existsSync(sourcePath)) return [];
-
-  try {
-    const entries = await collectEntries(sourcePath, categories);
-    if (smartRenameEnabled && entries.length > 0) {
-      await attachRenameSuggestions(entries);
+    if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error("The source folder no longer exists. Choose it again.");
+    const entries = await collectEntries(sourcePath, categories, filters, scope);
+    const aiEntries = entries.filter(entry => !entry.isDuplicate && (smartRenameEnabled || categories.some(category => category.id === entry.categoryId && category.smartCategorization)));
+    if (aiEntries.length > 0) {
+      await attachRenameSuggestions(aiEntries, normalizeNamingStyle(namingStyle));
     }
     return entries;
-  } catch (error) {
-    console.error("Folder preview failed.", error);
-    return [];
-  }
 }

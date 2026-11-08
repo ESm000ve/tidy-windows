@@ -1,7 +1,9 @@
-import { clsx } from "clsx";
+import type { ReactNode } from "react";
 import { CategoryRuleCard } from "./CategoryRuleCard";
 import { Copy, Sparkles, type Icon } from "../icons";
-import type { Category } from "../../lib/generateScript";
+import type { Category } from "../../types";
+import { FluentSelect } from "../controls/FluentSelect";
+import type { NamingStyle } from "../../../shared/naming";
 
 interface RulesSectionProps {
   categories: Category[];
@@ -9,13 +11,16 @@ interface RulesSectionProps {
   enabledCount: number;
   /** Ids matching the current search, or null when no search is active. */
   searchMatches: Set<string> | null;
-  searchQuery: string;
   smartRenameEnabled: boolean;
+  namingStyle: NamingStyle;
+  onNamingStyleChange: (style: NamingStyle) => void;
   onSmartRenameToggle: () => void;
   onToggleFeatureForAll: (feature: "smartCategorization" | "duplicateDetection") => void;
   onToggleExpanded: (id: string) => void;
   onPatchCategory: (id: string, patch: Partial<Category>) => void;
   onToggleExtension: (id: string, extension: string) => void;
+  /** Rule set controls, shown under the tools row. */
+  children?: ReactNode;
 }
 
 /** The AI feature chips and the two-column grid of category rules. */
@@ -24,13 +29,15 @@ export function RulesSection({
   expandedIds,
   enabledCount,
   searchMatches,
-  searchQuery,
   smartRenameEnabled,
+  namingStyle,
+  onNamingStyleChange,
   onSmartRenameToggle,
   onToggleFeatureForAll,
   onToggleExpanded,
   onPatchCategory,
   onToggleExtension,
+  children,
 }: RulesSectionProps) {
   const smartSortOn = categories.some((category) => category.smartCategorization);
   const duplicatesOn = categories.some((category) => category.duplicateDetection);
@@ -45,25 +52,24 @@ export function RulesSection({
   return (
     <section aria-label="File Rules" className="flex flex-col gap-3">
       <div className="flex items-center justify-between pl-1">
-        <h2 className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground/60">
-          Automated Rules
+        <h2 className="text-[20px] font-semibold text-foreground">
+          Automated rules
         </h2>
-        <span className="text-[13px] text-muted-foreground">
+        <span className="text-[14px] text-muted-foreground">
           {searchMatches ? `${searchMatches.size} matching` : `${enabledCount} active`}
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-1" role="group" aria-label="AI-powered features">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-[var(--system-purple)]/60 flex items-center gap-1 mr-1">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Organization tools">
+        <span className="text-[12px] font-semibold text-[var(--system-purple)] flex items-center gap-1 mr-1">
           <Sparkles className="w-3 h-3" aria-hidden="true" />
-          AI
+          Tools
         </span>
 
         <FeatureChip
           id="ai-smart-rename-chip"
           icon={Sparkles}
-          label="Smart Rename"
-          tone="purple"
+          label="Smart rename"
           active={smartRenameEnabled}
           onClick={onSmartRenameToggle}
           title="Use AI to generate better file names based on content and metadata"
@@ -71,8 +77,7 @@ export function RulesSection({
         <FeatureChip
           id="ai-smart-cat-chip"
           icon={Sparkles}
-          label="Smart Sort"
-          tone="purple"
+          label="Smart sort"
           active={smartSortOn}
           onClick={() => onToggleFeatureForAll("smartCategorization")}
           title="Use AI to sort files into smart content-based subfolders (e.g. Screenshots, Invoices)"
@@ -80,13 +85,16 @@ export function RulesSection({
         <FeatureChip
           id="ai-dup-detect-chip"
           icon={Copy}
-          label="Find Duplicates"
-          tone="blue"
+          label="Find duplicates"
           active={duplicatesOn}
           onClick={() => onToggleFeatureForAll("duplicateDetection")}
-          title="Detect and handle duplicate files across all categories"
+          title="Compare complete file contents locally; no AI or upload is needed"
         />
       </div>
+
+      {children}
+
+      {smartRenameEnabled && <div className="fluent-naming-choice"><FluentSelect label="Naming style" value={namingStyle} onChange={onNamingStyleChange} options={[{ value: "descriptive", label: "Descriptive" }, { value: "date-first", label: "Date first" }]} /><p>{namingStyle === "date-first" ? "Prefix suggestions with the file's last modified date: YYYY-MM-DD_Name.ext." : "Use short, meaningful file names. Suggestions are reviewed before a run."}</p></div>}
 
       <div className="flex flex-col md:flex-row gap-4 items-start">
         {columns.map((column, columnIndex) => (
@@ -98,7 +106,6 @@ export function RulesSection({
                 expanded={expandedIds.has(category.id)}
                 matchesSearch={!searchMatches || searchMatches.has(category.id)}
                 searching={searchMatches !== null}
-                searchQuery={searchQuery}
                 onToggleExpanded={() => onToggleExpanded(category.id)}
                 onPatch={(patch) => onPatchCategory(category.id, patch)}
                 onToggleExtension={(extension) => onToggleExtension(category.id, extension)}
@@ -115,32 +122,13 @@ interface FeatureChipProps {
   id: string;
   icon: Icon;
   label: string;
-  tone: "purple" | "blue";
   active: boolean;
   onClick: () => void;
   title: string;
 }
 
-/**
- * Tailwind needs to see complete class names at build time, so the active
- * styles per tone are written out rather than interpolated.
- */
-const CHIP_ACTIVE_CLASSES: Record<FeatureChipProps["tone"], string> = {
-  purple:
-    "bg-[var(--system-purple)]/15 border-[var(--system-purple)]/30 text-[var(--system-purple)] font-medium",
-  blue: "bg-[var(--system-blue)]/15 border-[var(--system-blue)]/30 text-[var(--system-blue)] font-medium",
-};
-
-const CHIP_DOT_CLASSES: Record<FeatureChipProps["tone"], string> = {
-  purple: "bg-[var(--system-purple)]",
-  blue: "bg-[var(--system-blue)]",
-};
-
-const CHIP_IDLE_CLASSES =
-  "bg-black/5 dark:bg-white/[0.06] border-black/10 dark:border-white/10 text-foreground/60 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/10";
-
-/** A pill that turns one AI feature on or off across the whole rule set. */
-function FeatureChip({ id, icon: ChipIcon, label, tone, active, onClick, title }: FeatureChipProps) {
+/** Turns an optional tool on or off across the rule set. */
+function FeatureChip({ id, icon: ChipIcon, label, active, onClick, title }: FeatureChipProps) {
   return (
     <button
       id={id}
@@ -148,19 +136,11 @@ function FeatureChip({ id, icon: ChipIcon, label, tone, active, onClick, title }
       onClick={onClick}
       aria-pressed={active}
       title={title}
-      className={clsx(
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] border-[0.5px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]",
-        active ? CHIP_ACTIVE_CLASSES[tone] : CHIP_IDLE_CLASSES,
-      )}
+      className="fluent-chip"
     >
       <ChipIcon className="w-3 h-3 shrink-0" aria-hidden="true" />
       {label}
-      {active && (
-        <span
-          className={clsx("w-1.5 h-1.5 rounded-full ml-0.5", CHIP_DOT_CLASSES[tone])}
-          aria-hidden="true"
-        />
-      )}
+
     </button>
   );
 }

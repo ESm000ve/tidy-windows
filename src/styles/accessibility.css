@@ -12,7 +12,7 @@
 }
 
 /* Thicker borders */
-.a11y-low-vision *[class*="border-[0.5px]"] {
+.a11y-low-vision *[class*="border"] {
     border-width: 1.5px !important;
 }
 
@@ -157,7 +157,7 @@
 /* ── COGNITIVE / FOCUS ─────────────────────────────────────────────────────── */
 
 .a11y-cognitive {
-    --font-sf: "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-ui: "Atkinson Hyperlegible", system-ui, sans-serif;
     --font-size: 17px;
 }
 
@@ -187,13 +187,13 @@
 /* ── HIGH CONTRAST ──────────────────────────────────────────────────────────── */
 .a11y-high-contrast {
     --border: rgba(0, 0, 0, 0.9);
-    --mac-window-background: #f0f0f0;
+    --fluent-window-background: #f0f0f0;
     --muted-foreground: #333333;
 }
 
 .a11y-high-contrast.dark {
     --border: rgba(255, 255, 255, 0.9);
-    --mac-window-background: #000000;
+    --fluent-window-background: #000000;
     --muted-foreground: #cccccc;
 }
 
@@ -205,7 +205,7 @@
 }
 
 /* Heavy borders everywhere */
-.a11y-high-contrast *[class*="border-[0.5px]"],
+.a11y-high-contrast *[class*="border"],
 .a11y-high-contrast *[class*="border-black/10"],
 .a11y-high-contrast *[class*="border-white/10"] {
     border-width: 2px !important;
@@ -241,9 +241,8 @@
 /* ── SCREEN READER ──────────────────────────────────────────────────────────── */
 /* Hides decorative shimmer, gradients, and visual-only badge elements
    so VoiceOver doesn't read noise. Relies on aria-hidden already being set. */
-.a11y-screen-reader [aria-hidden="true"] {
-    display: none !important;
-}
+/* Decorative artwork already uses aria-hidden. Keep it visible for sighted
+   screen-reader users, including icons that identify toolbar buttons. */
 
 /* Remove pointer-events-none clipping that can hide content from SR */
 .a11y-screen-reader .pointer-events-none {
@@ -272,7 +271,7 @@
     z-index: 9999;
     padding: 10px 20px;
     background: var(--system-blue);
-    color: #ffffff;
+    color: var(--accent-text);
     font-size: 13px;
     font-weight: 600;
     border-radius: 8px;
@@ -286,25 +285,4 @@
     top: 12px;
     outline: 3px solid #ffffff;
     outline-offset: 2px;
-}
-
-/* ── WINDOWS FORCED COLORS (High Contrast Mode) ─────────────────────────────── */
-@media (forced-colors: active) {
-    /* Ensure interactive elements use system highlight colors */
-    button, [role="button"], [role="checkbox"], [role="switch"] {
-        forced-color-adjust: none;
-        border: 2px solid ButtonText !important;
-        background: ButtonFace !important;
-        color: ButtonText !important;
-    }
-
-    button:focus-visible, [role="button"]:focus-visible {
-        outline: 3px solid Highlight !important;
-    }
-
-    /* Preserve toggle state visibility */
-    [data-state="checked"] {
-        background: Highlight !important;
-        border-color: Highlight !important;
-    }
 }

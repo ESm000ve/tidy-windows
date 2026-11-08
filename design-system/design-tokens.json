@@ -1,0 +1,224 @@
+{
+  "name": "Tidy Windows",
+  "systemVersion": "1.0.0",
+  "applicationVersion": "1.0.1",
+  "format": "Portable token inventory; Figma modes are represented explicitly, not by a claimed standard mode extension",
+  "source": "src/styles/windows.css",
+  "colors": {
+    "surface/window": {
+      "css": "var(--background)",
+      "light": "#f3f3f3",
+      "dark": "#202020",
+      "source": "src/styles/windows.css"
+    },
+    "surface/card": {
+      "css": "var(--card)",
+      "light": "#ffffff",
+      "dark": "#2b2b2b",
+      "source": "src/styles/windows.css"
+    },
+    "surface/layer": {
+      "css": "var(--layer-fill)",
+      "light": "#fafafa",
+      "dark": "#252525",
+      "source": "src/styles/windows.css"
+    },
+    "surface/popover": {
+      "css": "var(--popover)",
+      "light": "#fcfcfc",
+      "dark": "#2c2c2c",
+      "source": "src/styles/windows.css"
+    },
+    "text/primary": {
+      "css": "var(--foreground)",
+      "light": "#1a1a1a",
+      "dark": "#f5f5f5",
+      "source": "src/styles/windows.css"
+    },
+    "text/secondary": {
+      "css": "var(--muted-foreground)",
+      "light": "#5c5c5c",
+      "dark": "#bdbdbd",
+      "source": "src/styles/windows.css"
+    },
+    "text/disabled": {
+      "css": "var(--disabled-text)",
+      "light": "#777777",
+      "dark": "#a3a3a3",
+      "source": "src/styles/windows.css"
+    },
+    "accent/fill": {
+      "css": "var(--system-blue)",
+      "light": "#005fb8",
+      "dark": "#60cdff",
+      "source": "src/styles/windows.css"
+    },
+    "accent/label": {
+      "css": "var(--accent-text)",
+      "light": "#ffffff",
+      "dark": "#000000",
+      "source": "src/styles/windows.css"
+    },
+    "accent/subtle": {
+      "css": "var(--accent-subtle)",
+      "light": "#e5f1fb",
+      "dark": "#253b46",
+      "source": "src/styles/windows.css"
+    },
+    "border/subtle": {
+      "css": "var(--border)",
+      "light": "#e1e1e1",
+      "dark": "#3d3d3d",
+      "source": "src/styles/windows.css"
+    },
+    "border/control": {
+      "css": "var(--control-stroke)",
+      "light": "#d6d6d6",
+      "dark": "#515151",
+      "source": "src/styles/windows.css"
+    },
+    "border/strong": {
+      "css": "var(--control-stroke-strong)",
+      "light": "#858585",
+      "dark": "#a0a0a0",
+      "source": "src/styles/windows.css"
+    },
+    "control/rest": {
+      "css": "var(--control-fill)",
+      "light": "#ffffff",
+      "dark": "#373737",
+      "source": "src/styles/windows.css"
+    },
+    "control/hover": {
+      "css": "var(--control-hover)",
+      "light": "#f5f5f5",
+      "dark": "#404040",
+      "source": "src/styles/windows.css"
+    },
+    "control/pressed": {
+      "css": "var(--control-pressed)",
+      "light": "#ededed",
+      "dark": "#303030",
+      "source": "src/styles/windows.css"
+    },
+    "control/disabled": {
+      "css": "var(--muted)",
+      "light": "#eeeeee",
+      "dark": "#333333",
+      "source": "src/styles/windows.css"
+    },
+    "feedback/success": {
+      "css": "var(--system-green)",
+      "light": "#0f6c0f",
+      "dark": "#a6df9c",
+      "source": "src/styles/windows.css"
+    },
+    "feedback/warning": {
+      "css": "var(--system-orange)",
+      "light": "#895000",
+      "dark": "#f7cf8b",
+      "source": "src/styles/windows.css"
+    },
+    "feedback/error": {
+      "css": "var(--system-red)",
+      "light": "#b10e1c",
+      "dark": "#ffb3bc",
+      "source": "src/styles/windows.css"
+    },
+    "focus/ring": {
+      "css": "var(--fluent-focus-ring)",
+      "light": "#1a1a1a",
+      "dark": "#ffffff",
+      "source": "src/styles/windows.css"
+    },
+    "accent/hover": {
+      "css": "var(--accent-hover)",
+      "light": "#0056a6",
+      "dark": "#70d2ff",
+      "source": "src/styles/windows.css"
+    },
+    "accent/pressed": {
+      "css": "var(--accent-pressed)",
+      "light": "#004c93",
+      "dark": "#80d7ff",
+      "source": "src/styles/windows.css"
+    }
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    28,
+    32
+  ],
+  "radius": {
+    "control": 4,
+    "container": 8
+  },
+  "size": {
+    "control": 32,
+    "switchTrack": [
+      40,
+      20
+    ],
+    "switchTarget": [
+      44,
+      32
+    ],
+    "checkbox": 18,
+    "settingsMax": 680,
+    "ruleReviewMax": 600
+  },
+  "typography": {
+    "family": [
+      "Segoe UI Variable Text",
+      "Segoe UI",
+      "system-ui",
+      "sans-serif"
+    ],
+    "figmaFallback": "Inter",
+    "roles": {
+      "caption": {
+        "size": 12,
+        "line": 16,
+        "weight": 400
+      },
+      "body": {
+        "size": 14,
+        "line": 20,
+        "weight": 400
+      },
+      "bodyStrong": {
+        "size": 14,
+        "line": 20,
+        "weight": 600
+      },
+      "section": {
+        "size": 20,
+        "line": 28,
+        "weight": 600
+      },
+      "pageTitle": {
+        "size": 28,
+        "line": 36,
+        "weight": 600
+      }
+    }
+  },
+  "motion": {
+    "fastMs": 83,
+    "controlMs": 167,
+    "normalMs": 250,
+    "entrance": "cubic-bezier(0,0,0,1)",
+    "exit": "cubic-bezier(1,0,1,1)"
+  },
+  "notes": [
+    "Default accent is a baseline; the app can derive the Windows accent.",
+    "Hover and pressed Figma colors are resolved snapshots of color-mix formulas.",
+    "Dimensions without named app tokens are documented literals.",
+    "Portfolio display typography is presentation-only."
+  ]
+}

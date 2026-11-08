@@ -11,8 +11,9 @@
  * the wrong type. These helpers validate defensively and ignore anything they
  * don't recognise instead of throwing.
  */
-import type { Category } from "./generateScript";
+import type { Category } from "../types";
 import type { DateFilter, Filters, SizeFilter } from "../types";
+import { normalizeDateFolders } from "../../shared/dateFolders";
 
 /** A category the model wants to create. */
 export interface AiNewCategory {
@@ -21,6 +22,7 @@ export interface AiNewCategory {
   subfolders?: boolean;
   smartCategorization?: boolean;
   duplicateDetection?: boolean;
+  dateFolders?: string;
 }
 
 /** A patch against an existing category, identified by id. */
@@ -31,10 +33,14 @@ export interface AiCategoryUpdate {
   subfolders?: boolean;
   smartCategorization?: boolean;
   duplicateDetection?: boolean;
+  dateFolders?: string;
 }
 
 /** The full patch returned by `ai:parseRule`. Every field is optional. */
 export interface AiRulePatch {
+  includeSubfolders?: boolean | null;
+  /** A question instead of a patch when the instruction cannot be interpreted safely. */
+  clarification?: string | null;
   newCategories?: AiNewCategory[] | null;
   updateCategories?: AiCategoryUpdate[] | null;
   updateFilters?: Partial<Filters> | null;
@@ -47,6 +53,11 @@ export interface AiRulePatch {
 
 const DATE_FILTERS: DateFilter[] = ["any", "today", "week", "month", "year"];
 const SIZE_FILTERS: SizeFilter[] = ["any", "small", "medium", "large"];
+
+function readExtensions(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return [...new Set(value.filter((extension): extension is string => typeof extension === "string").map(extension => extension.trim().replace(/^\./, "").toLowerCase()).filter(extension => /^[a-z0-9][a-z0-9_-]{0,31}$/.test(extension)))];
+}
 
 /** Ids for AI-created categories are random so repeated rules never collide. */
 function createCategoryId(): string {
@@ -65,15 +76,19 @@ export function applyCategoryPatch(current: Category[], patch: AiRulePatch): Cat
 
   if (Array.isArray(patch.newCategories)) {
     for (const candidate of patch.newCategories) {
-      if (!candidate) continue;
+      if (!candidate || typeof candidate !== "object" || typeof candidate.name !== "string") continue;
+      const extensions = readExtensions(candidate.extensions);
+      const name = candidate.name.trim();
+      if (!name || /[<>:"/\\|?*\x00-\x1f]/.test(name) || /[. ]$/.test(name) || !extensions?.length) continue;
       next.push({
         id: createCategoryId(),
-        name: candidate.name || "Custom Rule",
+        name,
         enabled: true,
-        extensions: candidate.extensions ?? [],
-        subfolders: candidate.subfolders ?? false,
-        smartCategorization: candidate.smartCategorization ?? false,
-        duplicateDetection: candidate.duplicateDetection ?? false,
+        extensions,
+        subfolders: candidate.subfolders === true,
+        smartCategorization: candidate.smartCategorization === true,
+        duplicateDetection: candidate.duplicateDetection === true,
+        dateFolders: normalizeDateFolders(candidate.dateFolders),
       });
     }
   }
@@ -83,7 +98,14 @@ export function applyCategoryPatch(current: Category[], patch: AiRulePatch): Cat
       if (!update?.id) continue;
       const index = next.findIndex((category) => category.id === update.id);
       if (index === -1) continue;
-      next[index] = { ...next[index], ...update, id: next[index].id, name: next[index].name };
+      const clean: Partial<Category> = {};
+      for (const field of ["enabled", "subfolders", "smartCategorization", "duplicateDetection"] as const) {
+        if (typeof update[field] === "boolean") clean[field] = update[field];
+      }
+      if (update.dateFolders === "none" || update.dateFolders === "year" || update.dateFolders === "month") clean.dateFolders = update.dateFolders;
+      const extensions = readExtensions(update.extensions);
+      if (extensions) clean.extensions = extensions;
+      next[index] = { ...next[index], ...clean };
     }
   }
 

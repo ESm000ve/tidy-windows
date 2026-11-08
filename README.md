@@ -1,150 +1,108 @@
-# Tidy — File Organizer
+# Tidy — file organization with a moment to review
 
-Tidy is a modern, beautifully designed file organizer built with Electron and React. It brings an elegant and intuitive interface to an otherwise tedious task, making it easy to keep your directories clean and organized.
+A Windows desktop app that helps people organize files with visible rules, a preview before changes, and a way to undo them. Designed and built by **Eric Auzenne**, with AI-assisted design and development.
 
-![Tidy App Screenshot](./build/icon.png)
+**Windows 11 · Product design · UX/UI · Design systems · Electron + React**
 
-## Features
+![Tidy's light theme: folder selection, filters, and automated file rules](docs/screenshots/home-light.png)
 
-- **Dynamic Theme** — Supports Light, Dark, and System appearance.
-- **Rule Engine** — Visually build rules to filter files by type, extension, string match, and date ranges.
-- **Natural Language Parsing** — Type commands like *"Move all images from last week into my Archives"* and let the AI generate a rule for you.
-- **Preview Operations** — Inspect exactly what will be moved and where *before* running any destructive operations. Handles file collisions and duplicates gracefully.
-- **Intelligent Insights** — Detects common patterns in your folders to suggest rules that might save you time.
-- **Auto-Scheduling** — Run your cleanups automatically on a daily, weekly, or monthly schedule.
+[Design case study](docs/CASE-STUDY.md) · [Design system](design-system/README.md) · [Windows guide](docs/WINDOWS.md) · [Development](#run-locally)
 
----
+**[Download Tidy for Windows](https://github.com/ESm000ve/tidy-windows/releases/latest)** — Windows 11 x64. The installer is unsigned. Core organization works without an API key; add your own Gemini key in Settings for optional AI features.
 
-## Design & Experience
+## The product idea
 
-Tidy was designed from the ground up to feel like a **first-class citizen on macOS**. We prioritized a native aesthetic and fluid interactions to ensure that organizing files feels less like a chore and more like magic.
+Tidying a Downloads folder should feel predictable. Automation can save repetitive work, but a wrong rule can move personal documents somewhere unexpected. Tidy makes the scope visible and keeps review and recovery within the core workflow.
 
-### The Dashboard
-![Tidy Dashboard](./assets/home_dashboard.jpg)
-- **Glassmorphism & Depth:** We leverage translucent materials and subtle drop shadows that adapt beautifully to both light and dark modes, ensuring the app blends perfectly with your desktop environment.
-- **Clear Affordances:** The drag-and-drop zones for Source and Destination are immediately obvious, reducing cognitive load for first-time users.
+1. **Choose the scope.** Select source and destination folders, file types, and optional subfolders.
+2. **Set the rules.** Use category controls, filters, saved rule sets, or an optional natural-language instruction.
+3. **Review the changes.** Inspect destinations and naming suggestions before confirming.
+4. **Recover when needed.** Undo a recorded run from the Activity Log, including after restarting.
 
-### Visual Rules Engine
-![Visual Rules Engine](./assets/rules_engine.jpg)
-- **Node-Based Logic:** Instead of overwhelming users with complex boolean dropdowns, the visual node system allows users to intuitively chain conditions (e.g., "If File Type is .pdf" AND "Date is Within 30 days").
-- **Clean Typography:** Using SF Pro and careful whitespace management keeps the interface legible even when rules get complex.
+## Design decisions
 
-### AI Natural Language Command Bar
-![AI Command Bar](./assets/ai_prompt.jpg)
-- **Invisible Complexity:** For power users, the glowing AI command bar at the bottom provides a frictionless way to create rules ("Type a natural language rule...").
-- **Graceful Feedback:** Success states (like the "Rules updated" toast) are non-blocking and animate smoothly, keeping the user in the flow without requiring disruptive modal dismissals.
+| Decision | What it supports |
+| --- | --- |
+| Separate AI rule review from file preview | Check the interpreted instruction before authorizing file changes. |
+| Leave nested-folder collection off by default | Broader scope is explicit, with folder and file-type selections. |
+| Show suggestion sources and confidence | Local filename patterns and AI suggestions have distinct attribution. |
+| Include Undo in completion and history | Recovery is available alongside the result of an action. |
+| Follow Windows conventions | Familiar menus, shortcuts, Segoe typography, Fluent icons, and light/dark themes. |
 
----
+Read the [case study](docs/CASE-STUDY.md) for context, contribution, trade-offs, evidence, and proposed user research.
 
-## Getting Started
+## A closer look
 
-### Prerequisites
+### Review before moving files
 
-- [Node.js](https://nodejs.org/) v20 or later
-- npm v10 or later (comes bundled with Node.js)
+![The working preview with synthetic documents and proposed destinations](docs/screenshots/preview.png)
 
-### Installation
+### A complete dark theme
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/ericauzenne/tidy.git
-cd tidy
+![Tidy's dark theme with the same folder and rule controls](docs/screenshots/home-dark.png)
 
-# 2. Install dependencies
-npm install
+### Optional AI, configured by each user
 
-# 3. Set up environment variables
-cp .env.example .env
-# Open .env and add your Gemini API key (see below)
+![Settings with an empty Gemini key field and no configured key](docs/screenshots/settings.png)
 
-# 4. Start the app in development mode
+These are captures of the working desktop app with synthetic files and an isolated profile. Folder labels are anonymized for presentation. No personal documents or live AI responses appear. Regenerate them with `npm run build:app` and `npm run screenshots`.
+
+## What works today
+
+- Categories for documents, books, images, audio, video, and archives, with selectable extensions.
+- Modification-date and size filters, nested-folder selection, and full-content duplicate detection.
+- Conflict handling, replacement backups, year/month filing, saved rule sets, and import/export.
+- Manual runs, schedules while Tidy is running, and optional watched-folder organization.
+- Persistent history of the last 10 runs, per-run Undo, and backup cleanup through the Recycle Bin.
+- Optional Gemini rules, descriptive or date-first naming, and local naming fallback without a key.
+- Keyboard navigation, accessibility preferences, reduced motion, and Windows contrast-theme support.
+
+The preview shows up to 50 matching files; a confirmed run processes **all** matching files. AI suggestions apply to previewed files. Schedules and watched-folder runs follow saved rules without interactive preview and do not generate Smart Rename suggestions. Undo is limited history, not crash recovery. See the [Windows guide](docs/WINDOWS.md) for details.
+
+## Run locally
+
+Use **Windows 11 x64** and **Node.js 22 or later**. This repository contains the Windows version; macOS and Linux are not verified targets.
+
+```powershell
+npm ci
 npm run dev
 ```
 
-### Environment Variables
+The core organizer works without a key. For optional AI, open **Settings → AI connection** (`Ctrl+,`), paste **your own Gemini API key**, select **Save key**, then **Test connection**. Each user supplies their own key. Saved keys are encrypted for the Windows account, stored outside the project, and never returned to the interface. Developers can alternatively copy `.env.example` to `.env` and supply a local key; Settings keys take precedence.
 
-AI features (Smart Rename and Natural Language Rule parsing) require a Google Gemini API key.
+AI uses Google's online service and the user's project quota. Smart Rename and Smart sort may send filenames and supported file contents to Google when enabled. The connection test sends a short test message. Local organization, duplicate checks, and Undo need no AI service. See [privacy and security](SECURITY.md).
 
-1. Copy `.env.example` to `.env`.
-2. Obtain a free key at [Google AI Studio](https://aistudio.google.com/app/apikey).
-3. Add your key to `.env`:
+## Build a Windows app
 
-```
-GEMINI_API_KEY=your_key_here
+```powershell
+npm run build:win
 ```
 
-> **Note:** Without a key the app runs normally. Smart Rename falls back to local filename heuristics and the AI command bar reports that the feature is unavailable.
+The installer is generated under `release/`. For a portable local build, use `npm run build:win:unpacked`, then open `release/win-unpacked/Tidy.exe` or `Run Tidy.cmd`. Installers are currently unsigned. Binaries are excluded from Git; distribute a reviewed installer through GitHub Releases separately.
 
----
+## Verify changes
 
-## Build & Distribution
-
-```bash
-# Run a type check
-npm run typecheck
-
-# Build for the current platform
-npm run build
-
-# Build universal macOS DMG (Apple Silicon + Intel)
-npm run build:mac
+```powershell
+npx playwright install chromium
+npm run verify
+npm run check:publish -- --history --build
 ```
 
-The macOS build outputs separate DMG and ZIP files for each architecture inside `dist/`:
+Verification includes TypeScript, production build, file safety, desktop workflows, key storage, browser controls, and targeted accessibility checks. Tests use synthetic files and isolated profiles in `.test-artifacts/`. Live AI testing is separate (`npm run test:ai`), requires your key, and may consume quota. Automated accessibility checks do not establish complete WCAG conformance.
 
-| Architecture | Output |
-|---|---|
-| Apple Silicon (M-series) | `dist/arm64/Tidy-1.0.0-arm64.dmg` |
-| Intel (x64) | `dist/x64/Tidy-1.0.0-x64.dmg` |
+## Project structure
 
-### ⚠️ macOS Gatekeeper
-
-These builds use ad-hoc signing. Other users may see a *"Damaged"* or *"Unidentified Developer"* warning. To bypass it:
-
-1. Drag **Tidy** to `/Applications`.
-2. Open Terminal and run:
-   ```bash
-   xattr -cr /Applications/Tidy.app
-   ```
-3. Open the app normally.
-
-For a public release, configure [Notarization](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution) by adding your Apple Developer credentials to the `electron-builder` configuration.
-
----
-
-## Project Structure
-
-```
-tidy/
-├── electron/         # Main process (Electron)
-│   ├── main.ts       # App lifecycle, IPC handlers, AI integration
-│   └── preload.ts    # Context bridge — exposes safe APIs to renderer
-├── src/
-│   ├── app/
-│   │   ├── App.tsx           # Root React component and routing
-│   │   ├── components/       # Feature and UI components
-│   │   └── lib/              # Shared utilities (script generator, etc.)
-│   ├── styles/               # Global CSS and theme tokens
-│   └── main.tsx              # Renderer entry point
-├── build/            # App icons and macOS entitlements
-├── .env.example      # Environment variable template
-└── vite.config.ts    # Vite + Electron plugin configuration
+```text
+src/              React interface, state, shared rules, and styles
+electron/         Desktop lifecycle, secure IPC, and file/AI services
+scripts/          Verification, screenshots, and Windows packaging
+design-system/    Tokens, component reference, Figma exports, and specifications
+docs/             Case study, screenshots, platform guide, and archived reviews
+installer/        Windows installer hooks
 ```
 
----
+Historical reviews in `docs/archive/` describe earlier builds and may reference local artifacts excluded from Git. See [GitHub preparation](docs/GITHUB.md) for publication steps and [the publication review](docs/RELEASE-REVIEW.md) for this pass's results.
 
-## Contributing
+## Credits and license
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on contributing to this project.
-
----
-
-## Credits
-
-- SF Symbols via [@bradleyhodges/sfsymbols](https://github.com/bradleyhodges/sfsymbols)
-
----
-
-## License
-
-[MIT](./LICENSE)
+[MIT](LICENSE). Uses React, Electron, Radix, Microsoft Fluent icons, and the Gemini SDK. The [design-system reference](design-system/README.md) includes the editable Figma library and credits. [Contributions](CONTRIBUTING.md) are welcome.

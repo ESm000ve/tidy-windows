@@ -1,3 +1,4 @@
+import { walkSourceFiles, type SourceScanOptions } from "../lib/files";
 /**
  * A fast, name-only pass over a folder that powers the Insights sidebar.
  *
@@ -6,7 +7,6 @@
  * the user, not decisions the organizer acts on.
  */
 import fs from "node:fs";
-import { promises as fsp } from "node:fs";
 import path from "node:path";
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".heic", ".webp"];
@@ -30,7 +30,7 @@ export interface FolderInsights {
 const EMPTY: FolderInsights = { counts: {}, total: 0 };
 
 /** Count the heuristics the Insights sidebar reports on. */
-export async function scanFolderInsights(sourcePath: string): Promise<FolderInsights> {
+export async function scanFolderInsights(sourcePath: string, scope: SourceScanOptions = {}): Promise<FolderInsights> {
   if (!sourcePath || !fs.existsSync(sourcePath)) return EMPTY;
 
   const counts: Record<string, number> = {
@@ -45,11 +45,8 @@ export async function scanFolderInsights(sourcePath: string): Promise<FolderInsi
   let total = 0;
 
   try {
-    const directory = await fsp.opendir(sourcePath);
-    for await (const dirent of directory) {
-      if (!dirent.isFile() || dirent.name.startsWith(".")) continue;
-
-      const filename = dirent.name;
+    for await (const file of walkSourceFiles(sourcePath, { ...scope, excludeHidden: true })) {
+      const filename = file.name;
       const extension = path.extname(filename).toLowerCase();
       const lower = filename.toLowerCase();
 

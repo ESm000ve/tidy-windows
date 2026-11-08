@@ -1,39 +1,36 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { toast } from "sonner";
+import * as Dialog from "@radix-ui/react-dialog";
 
 import { clsx } from "clsx";
-import type { Category } from "../lib/generateScript";
+import type { Category } from "../types";
+import { dateFolderSegments } from "../../shared/dateFolders";
 import type { RunState, RunMetrics } from "./StatusBar";
-import type { PreviewFile, SmartRenameInfo } from "../../electron";
+import type { PreviewFile } from "../../electron";
+import type { Operation } from "../types";
 
-import { Warning as AlertTriangle, Archive, ArrowRight, Check, CheckCircle as CheckCircle2, ChevronRight, Copy, Eye, Document as FileText, Filter, Folder, PhotoFill as ImageIcon, Info, Circle as LucideIcon, MusicList as Music, Play, Search, Settings, Sparkles, Film as Video, X } from "./icons";
+import { Warning as AlertTriangle, Archive, ArrowRight, Check, CheckCircle as CheckCircle2, ChevronRight, Copy, Eye, Document as FileText, PhotoFill as ImageIcon, Info, MusicList as Music, Play, Sparkles, Film as Video, X } from "./icons";
+
+/** Rows drawn in the post-run recap; the Audit Log has the full list. */
+const RECAP_LIMIT = 200;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ClassSource = "extension" | "metadata" | "ai";
 type Confidence = "high" | "medium" | "low";
 
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
 
-const CAT_COLOR: Record<string, string> = {
-  documents: "var(--system-blue)",
-  images: "var(--system-purple)",
-  audio: "var(--system-green)",
-  video: "var(--system-orange)",
-  archives: "var(--system-yellow)",
-};
-
 const CONFIDENCE_CFG = {
   high: { label: "High", color: "text-[var(--system-green)]", bg: "bg-[var(--system-green)]/10", border: "rgba(50,215,75,0.22)", tip: "Good to go — strongly matched by file type and content" },
-  medium: { label: "Review", color: "text-amber-400", bg: "bg-amber-400/10", border: "rgba(255,159,10,0.22)", tip: "Consider reviewing — partial match, check the destination" },
-  low: { label: "Verify", color: "text-rose-400", bg: "bg-rose-400/10", border: "rgba(255,69,58,0.22)", tip: "Needs your attention — low confidence, verify before running" },
+  medium: { label: "Review", color: "text-[var(--system-orange)]", bg: "bg-[var(--system-orange)]/10", border: "rgba(255,159,10,0.22)", tip: "Consider reviewing — partial match, check the destination" },
+  low: { label: "Verify", color: "text-[var(--system-red)]", bg: "bg-[var(--system-red)]/10", border: "rgba(255,69,58,0.22)", tip: "Needs your attention — low confidence, verify before running" },
 };
 
-// Human-readable attribution labels per HIG Machine Learning § Attribution
+// Human-readable attribution labels for AI suggestions
 const CLASS_SOURCE_LABEL: Record<string, string> = {
   extension: "By file type",
   metadata: "By content",
-  ai: "AI classified",
+  ai: "AI assisted",
+  filename: "Name pattern",
 };
 
 function FileIcon({ ext, className }: { ext: string; className?: string }) {
@@ -51,7 +48,7 @@ function ConfidenceChip({ confidence }: { confidence: Confidence }) {
   const cfg = CONFIDENCE_CFG[confidence];
   return (
     <span title={cfg.tip}
-      className={clsx("px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold uppercase tracking-wider border", cfg.color, cfg.bg)}
+      className={clsx("px-1.5 py-0.5 rounded-[4px] text-[12px] font-semibold   border", cfg.color, cfg.bg)}
       style={{ borderColor: cfg.border }}
       aria-label={`Confidence: ${cfg.label}`}>
       {cfg.label}
@@ -60,22 +57,24 @@ function ConfidenceChip({ confidence }: { confidence: Confidence }) {
 }
 
 function FileRow({
-  file, keepOriginal, onToggleKeep,
+  file,
   smartRenameEnabled, accepted, onToggleAccept,
   dimmed = false,
   categoryConfig,
 }: {
   file: PreviewFile;
-  keepOriginal: boolean;
-  onToggleKeep: () => void;
   smartRenameEnabled?: boolean;
   accepted?: boolean;
   onToggleAccept?: (id: string) => void;
   dimmed?: boolean;
   categoryConfig?: Category;
 }) {
-  const classSrc = file.classSource || "extension";
-  const conf = file.confidence || "high";
+  const localSuggestion = file.smartRename?.source === "local";
+  const classSrc = localSuggestion ? "filename" : file.classSource || "extension";
+  const conf = file.smartRename?.confidence || file.confidence || "high";
+  // Files routed to Review do not get date folders, matching the organizer.
+  const reviewRouted = Boolean(accepted && file.smartRename && (conf === "medium" || conf === "low"));
+  const dateSegments = reviewRouted ? [] : dateFolderSegments(file.modifiedMs ?? NaN, categoryConfig?.dateFolders);
 
   return (
     <div className={clsx(
@@ -84,44 +83,52 @@ function FileRow({
     )}>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="w-8 h-8 rounded-[10px] bg-black/5 dark:bg-white/[0.06] border-[0.5px] border-black/10 dark:border-white/[0.08] flex items-center justify-center shrink-0" aria-hidden="true">
-            <FileIcon ext={file.ext} className="w-4 h-4 text-foreground/80 dark:text-white/80" />
+          <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/[0.06] border border-black/10 dark:border-white/[0.08] flex items-center justify-center shrink-0" aria-hidden="true">
+            <FileIcon ext={file.ext} className="w-4 h-4 text-foreground dark:text-foreground" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[13px] text-foreground/90 dark:text-white/82 font-medium truncate">{file.name}</span>
-            <span className="text-[11px] text-muted-foreground dark:text-white/40 mt-0.5">{file.from}</span>
+            <span className="text-[14px] text-foreground dark:text-foreground font-medium truncate">{file.name}</span>
+            <span className="text-[12px] text-muted-foreground mt-0.5 truncate" title={file.from}>{file.relativePath?.split(/[\\/]/).slice(0, -1).join(" › ") || file.from}</span>
           </div>
         </div>
 
         {/* Destination / Duplicate Status */}
         <div className="w-[140px] hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] bg-black/[0.03] border border-black/[0.05] dark:bg-white/[0.03] dark:border-white/[0.05]">
           {file.isDuplicate ? (
-            <span className="text-[11px] text-[var(--system-red)] truncate font-semibold" title={`Duplicate of: ${file.duplicateOf || 'unknown'}`}>
-              → Match: <span className="text-foreground/50 dark:text-white/50">{file.duplicateOf || 'Original'}</span>
+            <span className="text-[12px] text-[var(--system-red)] truncate font-semibold" title={`Duplicate of: ${file.duplicateOf || 'unknown'}`}>
+              → Match: <span className="text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)]">{file.duplicateOf || 'Original'}</span>
             </span>
-          ) : file.smartRename && (conf === "medium" || conf === "low") ? (
+          ) : accepted && file.smartRename && (conf === "medium" || conf === "low") ? (
             <span className="text-[12px] text-[var(--system-orange)] truncate font-semibold" title="Needs Review Routing">Review</span>
           ) : (
-            <span className="text-[12px] text-foreground/50 dark:text-white/50 truncate capitalize" title={file.category}>{file.category}</span>
+            <span className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] truncate capitalize" title={file.category}>{file.category}</span>
           )}
 
-          {!file.isDuplicate && (
+          {!file.isDuplicate && (categoryConfig?.subfolders || categoryConfig?.smartCategorization) && (
             <>
-              <ChevronRight className="w-2.5 h-2.5 text-foreground/20 dark:text-white/20 shrink-0" aria-hidden="true" />
-              <span className="text-[12px] text-foreground/80 dark:text-white/68 font-medium truncate" title={categoryConfig?.smartCategorization && file.smartRename?.subfolder ? file.smartRename.subfolder : file.ext}>
+              <ChevronRight className="w-2.5 h-2.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] shrink-0" aria-hidden="true" />
+              <span className="text-[12px] text-foreground dark:text-[var(--fluent-secondary-label)] font-medium truncate" title={categoryConfig?.smartCategorization && file.smartRename?.subfolder ? file.smartRename.subfolder : file.ext}>
                 {categoryConfig?.smartCategorization && file.smartRename?.subfolder ? file.smartRename.subfolder : file.ext}
+              </span>
+            </>
+          )}
+          {!file.isDuplicate && dateSegments.length > 0 && (
+            <>
+              <ChevronRight className="w-2.5 h-2.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] shrink-0" aria-hidden="true" />
+              <span className="text-[12px] text-foreground dark:text-[var(--fluent-secondary-label)] font-medium truncate" title={`Date folder from last modified: ${dateSegments.join("\\")}`}>
+                {dateSegments.join("\\")}
               </span>
             </>
           )}
         </div>
 
-        {/* Source info (Attribution + Confidence) — HIG ML: show attribution in human terms */}
+        {/* Show the suggestion source and confidence in human terms. */}
         {!file.isDuplicate && (
           <div className="w-[90px] hidden lg:flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-1.5">
               <span
-                className="text-[9px] text-foreground/40 dark:text-white/40 tracking-tight"
-                title={classSrc === 'ai' ? 'Classification was determined by AI analysis' : classSrc === 'metadata' ? 'Classification was determined by file content analysis' : 'Classification was determined by file extension'}
+                className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] tracking-tight"
+                title={classSrc === 'ai' ? 'Suggestion from AI analysis' : classSrc === 'filename' ? 'Suggestion from a local filename pattern; no AI request' : classSrc === 'metadata' ? 'Based on file content analysis' : 'Category determined by file extension'}
               >
                 {CLASS_SOURCE_LABEL[classSrc] ?? classSrc}
               </span>
@@ -135,8 +142,8 @@ function FileRow({
           {file.path && window.electron && window.electron.previewFile && (
             <button
               onClick={() => void window.electron?.previewFile(file.path!)}
-              aria-label={`Preview ${file.name}`}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/[0.05] text-foreground/50 dark:text-white/40 hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-foreground/70 dark:hover:text-white/60 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+              aria-label={`Show ${file.name} in File Explorer`} title="Show in File Explorer"
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/[0.05] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-[var(--fluent-secondary-label)] dark:hover:text-[var(--fluent-secondary-label)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
             >
               <Eye className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -144,51 +151,40 @@ function FileRow({
           {file.smartRename && (
             <button
               onClick={() => onToggleAccept && onToggleAccept(file.id)}
-              aria-label={accepted ? `Accepted rename for ${file.name}` : `Accept rename suggestion for ${file.name}`}
+              aria-label={accepted ? `Accepted suggestion for ${file.name}` : `Accept suggestion for ${file.name}`}
               aria-pressed={accepted}
               className={clsx(
-                "w-8 h-8 flex items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]",
-                accepted ? "bg-[var(--system-green)]/20 text-[var(--system-green)]" : "bg-black/5 dark:bg-white/[0.05] text-foreground/50 dark:text-white/40 hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-foreground/70 dark:hover:text-white/60"
+                "w-8 h-8 flex items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]",
+                accepted ? "bg-[var(--system-green)]/20 text-[var(--system-green)]" : "bg-black/5 dark:bg-white/[0.05] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-[var(--fluent-secondary-label)] dark:hover:text-[var(--fluent-secondary-label)]"
               )}
             >
               <Check className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           )}
-          <button
-            onClick={onToggleKeep}
-            aria-label={keepOriginal ? `Keeping original copy of ${file.name}` : `Move only ${file.name}`}
-            aria-pressed={keepOriginal}
-            className={clsx(
-              "w-8 h-8 flex items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]",
-              keepOriginal ? "bg-[var(--system-blue)]/20 text-[var(--system-blue)]" : "bg-black/5 dark:bg-white/[0.05] text-foreground/50 dark:text-white/40 hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-foreground/70 dark:hover:text-white/60"
-            )}
-          >
-            <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
         </div>
       </div>
 
-      {/* Suggestion label + diff — HIG Generative AI: clearly label AI-generated content */}
+      {/* Clearly label the generated suggestion and name changes. */}
       {file.smartRename && (
         <div className="flex flex-col mt-2 ml-11 gap-1" aria-label={`AI rename suggestion: ${file.smartRename.suggested}`}>
           <div className="flex items-center gap-1.5 flex-wrap">
             <span
-              className="inline-flex items-center gap-[3px] text-[11px] text-[var(--system-purple)]/80 shrink-0 bg-[var(--system-purple)]/10 px-1.5 py-0.5 rounded-sm"
-              title="This rename was suggested by AI — you can accept or ignore it"
+              className="inline-flex items-center gap-[3px] text-[12px] text-[var(--system-purple)] shrink-0 bg-[var(--system-purple)]/10 px-1.5 py-0.5 rounded-sm"
+              title="You can accept or ignore this suggestion"
             >
               <Sparkles className="w-2.5 h-2.5" aria-hidden="true" />
-              <span>AI Suggestion</span>
+              <span>{localSuggestion ? "Local" : "AI"} {smartRenameEnabled ? "name suggestion" : "folder suggestion"}</span>
             </span>
-            <ArrowRight className="w-2.5 h-2.5 text-foreground/20 dark:text-white/20 shrink-0" aria-hidden="true" />
+            <ArrowRight className="w-2.5 h-2.5 text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] shrink-0" aria-hidden="true" />
             <span
               className="text-[12px] text-[var(--system-purple)] font-medium truncate"
-              title={file.smartRename.suggested}
+              title={smartRenameEnabled ? file.smartRename.suggested : file.smartRename.subfolder}
             >
-              {file.smartRename.suggested}
+              {smartRenameEnabled ? file.smartRename.suggested : file.smartRename.subfolder}
             </span>
           </div>
           {file.smartRename.reason && (
-            <span className="flex items-center gap-1 text-[11px] text-foreground/50 dark:text-white/50 leading-snug max-w-[90%]">
+            <span className="flex items-center gap-1 text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] leading-snug max-w-[90%]">
               <Info className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
               {file.smartRename.reason}
             </span>
@@ -199,98 +195,56 @@ function FileRow({
   );
 }
 
-function ColHeaders({ smartRenameEnabled }: { smartRenameEnabled: boolean }) {
+function ColHeaders() {
   return (
     <div className="flex items-center gap-4 px-5 py-2 shrink-0 bg-black/[0.02] dark:bg-white/[0.015] border-b-[0.5px] border-black/5 dark:border-white/[0.04]">
-      <span className="flex-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground dark:text-white/40">File</span>
-      <span className="w-[140px] hidden md:block text-[11px] font-bold uppercase tracking-wider text-muted-foreground dark:text-white/40">Destination</span>
-      <span className="w-[80px] hidden lg:block text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground dark:text-white/40">Match</span>
+      <span className="flex-1 text-[12px] font-semibold text-muted-foreground dark:text-[var(--fluent-secondary-label)]">File</span>
+      <span className="w-[140px] hidden md:block text-[12px] font-semibold text-muted-foreground dark:text-[var(--fluent-secondary-label)]">Destination</span>
+      <span className="w-[80px] hidden lg:block text-right text-[12px] font-semibold text-muted-foreground dark:text-[var(--fluent-secondary-label)]">Match</span>
       <div className="w-[68px]" />
     </div>
   );
 }
 
 function BulkRenameBar({
-  files, acceptedRenames, onApplyAll, onRevertAll,
+  files, onApplyAll, onRevertAll, smartRenameEnabled,
 }: {
   files: PreviewFile[];
-  acceptedRenames: Record<string, boolean>;
   onApplyAll: () => void;
   onRevertAll: () => void;
+  smartRenameEnabled: boolean;
 }) {
   const smartCount = files.filter(f => f.smartRename).length;
+  const usesAI = files.some(file => file.smartRename && file.smartRename.source !== "local");
   if (smartCount === 0) return null;
 
   return (
     <div
       className="px-5 py-2.5 bg-[var(--system-purple)]/5 border-b border-[var(--system-purple)]/10 flex items-center justify-between shrink-0"
       role="region"
-      aria-label={`AI suggested ${smartCount} smart renames`}
+      aria-label={`${usesAI ? "AI" : "Tidy"} suggested ${smartCount} changes`}
     >
       <div className="flex items-center gap-2">
         <Sparkles className="w-3.5 h-3.5 text-[var(--system-purple)]" aria-hidden="true" />
-        <span className="text-[12px] text-[var(--system-purple)]/80">
-          AI suggested {smartCount} rename{smartCount !== 1 ? 's' : ''}
+        <span className="text-[12px] text-[var(--system-purple)]">
+          {usesAI ? "AI suggested" : "Suggested"} {smartCount} {smartRenameEnabled ? "name" : "folder"}{smartCount !== 1 ? 's' : ''}
         </span>
       </div>
       <div className="flex items-center gap-3">
         <button
           onClick={onRevertAll}
-          aria-label="Revert all AI rename suggestions"
-          className="text-[12px] text-foreground/50 dark:text-white/50 hover:text-foreground/80 dark:hover:text-white/80 transition-colors capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] rounded px-2 py-1"
+          aria-label="Ignore all AI suggestions"
+          className="text-[12px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:text-foreground dark:hover:text-foreground transition-colors capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] rounded px-2 py-1"
         >
-          Revert All
+          Ignore all
         </button>
         <button
           onClick={onApplyAll}
-          aria-label="Accept all AI rename suggestions"
-          className="text-[12px] text-[var(--system-purple)] font-semibold opacity-90 hover:opacity-100 transition-opacity capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] rounded px-2 py-1"
+          aria-label="Accept all AI suggestions"
+          className="text-[12px] text-[var(--system-purple)] font-semibold opacity-90 hover:opacity-100 transition-opacity capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] rounded px-2 py-1"
         >
-          Apply All
+          Accept all
         </button>
-      </div>
-    </div>
-  );
-}
-
-function ReviewSection({
-  files, overrides, onOverride, categories,
-  smartRenameEnabled, acceptedRenames, onToggleAccept,
-}: {
-  files: PreviewFile[];
-  overrides: Record<string, string>;
-  onOverride: (id: string, dest: string) => void;
-  categories: Category[];
-  smartRenameEnabled?: boolean;
-  acceptedRenames?: Record<string, boolean>;
-  onToggleAccept?: (id: string) => void;
-}) {
-  return (
-    <div className="mt-6 px-5 pb-8 shrink-0">
-      <div className="flex items-center gap-2 mb-4">
-        <AlertTriangle className="w-3.5 h-3.5 text-[var(--system-orange)]" />
-        <h3 className="text-[12px] font-bold uppercase tracking-widest text-[var(--system-orange)]">Needs Review ({files.length})</h3>
-      </div>
-
-      <div className="space-y-3">
-        {files.map(file => (
-          <div key={file.id} className="p-3 bg-black/[0.03] dark:bg-white/[0.03] rounded-lg border border-black/5 dark:border-white/[0.06]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[13px] text-foreground/90 dark:text-white/82 font-medium truncate">{file.name}</span>
-              <span className="text-[9px] text-[var(--system-red)] font-bold uppercase tracking-wider bg-[var(--system-red)]/10 px-1.5 py-0.5 rounded-sm border border-[var(--system-red)]/20">Conflict</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                aria-label={`Override category for ${file.name}`}
-                className="flex-1 bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] rounded-md px-2 py-1 text-[12px] text-foreground/80 dark:text-white/62 outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
-                onChange={(e) => onOverride(file.id, e.target.value)}
-                value={overrides[file.id] || file.category}
-              >
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -305,8 +259,8 @@ function RunningMessage() {
       aria-live="polite"
     >
       <div className="w-12 h-12 rounded-full border-2 border-[var(--system-blue)]/20 border-t-[var(--system-blue)] animate-spin mb-4" aria-hidden="true" />
-      <p className="text-[13px] text-foreground/70 dark:text-white/62 font-medium">Tidying your files…</p>
-      <p className="text-[12px] text-muted-foreground dark:text-white/40 mt-1">This may take a moment depending on file count</p>
+      <p className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] font-medium">Tidying your files…</p>
+      <p className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] mt-1">This may take a moment depending on file count</p>
     </div>
   );
 }
@@ -327,29 +281,29 @@ function SummaryStrip({
   return (
     <div className="flex items-center gap-5 px-5 py-3 shrink-0 bg-black/[0.02] dark:bg-white/[0.02] border-b-[0.5px] border-black/5 dark:border-white/[0.06]">
       <div className="flex items-center gap-1.5">
-        <ArrowRight className="w-3 h-3 text-muted-foreground dark:text-white/22" />
-        <span className="text-[13px] text-foreground/90 dark:text-white/82 font-medium">{files.length}</span>
-        <span className="text-[12px] text-muted-foreground dark:text-white/32">to move</span>
+        <ArrowRight className="w-3 h-3 text-muted-foreground dark:text-[var(--fluent-secondary-label)]" />
+        <span className="text-[14px] text-foreground dark:text-foreground font-medium">{files.length}</span>
+        <span className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)]">to move</span>
       </div>
       {renameCount > 0 && (
         <div className="flex items-center gap-1.5">
-          <Copy className="w-3 h-3 text-muted-foreground dark:text-white/22" />
-          <span className="text-[13px] text-foreground/90 dark:text-white/82 font-medium">{renameCount}</span>
-          <span className="text-[12px] text-muted-foreground dark:text-white/32">to rename</span>
+          <Copy className="w-3 h-3 text-muted-foreground dark:text-[var(--fluent-secondary-label)]" />
+          <span className="text-[14px] text-foreground dark:text-foreground font-medium">{renameCount}</span>
+          <span className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)]">to rename</span>
         </div>
       )}
       {reviewCount > 0 && (
         <div className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3 h-3 text-[var(--system-orange)]/50" />
-          <span className="text-[13px] text-[var(--system-orange)]/90 font-medium">{reviewCount}</span>
-          <span className="text-[12px] text-[var(--system-orange)]/60">needs review</span>
+          <AlertTriangle className="w-3 h-3 text-[var(--system-orange)]" />
+          <span className="text-[14px] text-[var(--system-orange)] font-medium">{reviewCount}</span>
+          <span className="text-[12px] text-[var(--system-orange)]">needs review</span>
         </div>
       )}
 
       {isRunning && (
         <div className="ml-auto w-32 flex flex-col gap-1.5">
-          <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider">
-            <span className="text-muted-foreground dark:text-white/22">Progress</span>
+          <div className="flex justify-between text-[12px] font-semibold">
+            <span className="text-muted-foreground dark:text-[var(--fluent-secondary-label)]">Progress</span>
             <span className="text-[var(--system-blue)]">{Math.round(progress)}%</span>
           </div>
           <div className="h-1 rounded-full bg-black/5 dark:bg-white/[0.06] overflow-hidden">
@@ -361,22 +315,16 @@ function SummaryStrip({
   );
 }
 
-function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; onClose: () => void; runState: RunState }) {
+function CompletionView({ metrics, onClose, runState, onUndo }: { metrics: RunMetrics; onClose: () => void; runState: RunState; onUndo: (operations: Operation[]) => Promise<boolean | undefined> }) {
   const isError = runState === "error";
   const [undoStatus, setUndoStatus] = useState<"idle" | "undoing" | "done">("idle");
 
   const handleUndo = async () => {
     if (!window.electron || !metrics.operations || metrics.operations.length === 0) return;
     setUndoStatus("undoing");
-    const result = await window.electron.undoOrganize(metrics.operations);
-    if (result.success) {
+    if (await onUndo(metrics.operations)) {
       setUndoStatus("done");
-      setTimeout(() => {
-        onClose();
-        window.location.reload();
-      }, 1500);
     } else {
-      toast.error("Undo failed. Some files might not have been restored.");
       setUndoStatus("idle");
     }
   };
@@ -396,35 +344,35 @@ function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; o
           <CheckCircle2 className="w-16 h-16 text-[var(--system-green)] mb-6 drop-shadow-[0_4px_12px_rgba(52,199,89,0.25)]" />
         )}
 
-        <h2 className="text-[20px] font-semibold text-foreground/90 dark:text-white/92 mb-2">
+        <h2 className="text-[20px] font-semibold text-foreground dark:text-foreground mb-2">
           {undoStatus === "done" ? "Undo Complete" : isError ? "Something went wrong" : "Tidy Complete!"}
         </h2>
-        <p className="text-[13px] text-muted-foreground dark:text-white/32 mb-6 text-center max-w-[280px]">
+        <p className="text-[14px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] mb-6 text-center max-w-[280px]">
           {undoStatus === "done" ? "Files were restored to their original locations." : isError ? "The organization process encountered an error. Some files may not have been moved."
-            : "Your workspace is now beautifully organized. Let's keep it that way!"}
+            : "Your files have been organized. You can undo these changes below."}
         </p>
 
         {!isError && undoStatus !== "done" && (
           <div className="grid grid-cols-2 gap-4 w-full max-w-[320px] mb-8">
-            <div className="p-4 rounded-xl bg-black/5 dark:bg-white/[0.03] border border-black/10 dark:border-white/[0.06] flex flex-col items-center">
-              <span className="text-[24px] font-bold text-foreground/90 dark:text-white/92 leading-none">{metrics.moved}</span>
-              <span className="text-[11px] text-muted-foreground dark:text-white/22 font-bold uppercase tracking-widest mt-2 px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/[0.04]">Moved</span>
+            <div className="p-4 rounded-lg bg-black/5 dark:bg-white/[0.03] border border-black/10 dark:border-white/[0.06] flex flex-col items-center">
+              <span className="text-[24px] font-semibold text-foreground dark:text-foreground leading-none">{metrics.moved}</span>
+              <span className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] font-semibold mt-2 px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/[0.04]">Moved</span>
             </div>
-            <div className="p-4 rounded-xl bg-black/5 dark:bg-white/[0.03] border border-black/10 dark:border-white/[0.06] flex flex-col items-center">
-              <span className="text-[24px] font-bold text-foreground/90 dark:text-white/92 leading-none">{metrics.renamed}</span>
-              <span className="text-[11px] text-muted-foreground dark:text-white/22 font-bold uppercase tracking-widest mt-2 px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/[0.04]">Renamed</span>
+            <div className="p-4 rounded-lg bg-black/5 dark:bg-white/[0.03] border border-black/10 dark:border-white/[0.06] flex flex-col items-center">
+              <span className="text-[24px] font-semibold text-foreground dark:text-foreground leading-none">{metrics.renamed}</span>
+              <span className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] font-semibold mt-2 px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/[0.04]">Renamed</span>
             </div>
           </div>
         )}
 
         {/* Action Buttons */}
-        {!isError && undoStatus !== "done" && (
+        {undoStatus !== "done" && (
           <div className="flex items-center gap-3">
             {metrics.operations && metrics.operations.length > 0 && (
               <button
                 onClick={handleUndo}
                 disabled={undoStatus !== "idle"}
-                className="px-6 py-2.5 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-foreground/70 dark:text-white/70 text-[13px] font-medium hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-foreground dark:hover:text-white active:scale-95 transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+                className="px-6 py-2.5 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-[var(--fluent-secondary-label)] dark:text-foreground text-[14px] font-medium hover:bg-black/10 dark:hover:bg-white/[0.1] hover:text-foreground dark:hover:text-white active:scale-95 transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
               >
                 {undoStatus === "undoing" ? "Undoing..." : "Undo Changes"}
               </button>
@@ -432,24 +380,24 @@ function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; o
             {metrics.destPath && (
               <button
                 onClick={handleOpenDest}
-                className="px-6 py-2.5 rounded-full bg-[var(--system-blue)] text-white text-[13px] font-bold hover:opacity-90 active:scale-95 transition-all shadow-[0_4px_12px_rgba(10,132,255,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] focus-visible:ring-offset-2"
+                className="px-6 py-2.5 rounded-full bg-[var(--system-blue)] text-[var(--accent-text)] text-[14px] font-semibold hover:opacity-90 active:scale-95 transition-all shadow-[0_4px_12px_rgba(10,132,255,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] focus-visible:ring-offset-2"
               >
                 Open Destination
               </button>
             )}
             <button
               onClick={onClose}
-              className="px-6 py-2.5 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-foreground/80 dark:text-white/80 text-[13px] font-semibold hover:bg-black/10 dark:hover:bg-white/[0.10] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+              className="px-6 py-2.5 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-foreground dark:text-foreground text-[14px] font-semibold hover:bg-black/10 dark:hover:bg-white/[0.10] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
             >
               Done
             </button>
           </div>
         )}
 
-        {(isError || undoStatus === "done") && (
+        {undoStatus === "done" && (
           <button
             onClick={onClose}
-            className="px-8 py-3 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-foreground/80 dark:text-white/80 text-[14px] font-semibold hover:bg-black/10 dark:hover:bg-white/[0.10] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]"
+            className="px-8 py-3 rounded-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/[0.1] text-foreground dark:text-foreground text-[14px] font-semibold hover:bg-black/10 dark:hover:bg-white/[0.10] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]"
           >
             Done
           </button>
@@ -459,23 +407,23 @@ function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; o
       {/* Operations List */}
       {!isError && undoStatus !== "done" && metrics.operations && metrics.operations.length > 0 && (
         <div className="flex-1 mt-4 max-w-2xl mx-auto w-full">
-          <h3 className="text-[13px] text-muted-foreground dark:text-white/40 uppercase tracking-wider font-semibold mb-3">Operations Recap</h3>
+          <h3 className="text-[14px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] font-semibold mb-3">Operations Recap</h3>
           <div className="flex flex-col gap-2 relative z-0">
-            {metrics.operations.map((op, i) => {
+            {metrics.operations.slice(0, RECAP_LIMIT).map((op, i) => {
               const ext = op.originalName.split('.').pop() || '';
-              const iconColorCls = "text-muted-foreground dark:text-white/40"; // Default
+              const iconColorCls = "text-muted-foreground dark:text-[var(--fluent-secondary-label)]"; // Default
 
               return (
-                <div key={i} className="flex items-center p-3 rounded-xl bg-black/5 dark:bg-white/[0.02] border border-black/10 dark:border-white/[0.04] group hover:bg-black/10 dark:hover:bg-white/[0.04] transition-colors relative">
+                <div key={i} className="flex items-center p-3 rounded-lg bg-black/5 dark:bg-white/[0.02] border border-black/10 dark:border-white/[0.04] group hover:bg-black/10 dark:hover:bg-white/[0.04] transition-colors relative">
                   <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/[0.06] flex items-center justify-center shrink-0 mr-3 border border-black/5 dark:border-white/[0.08]">
-                    <span className={`text-[11px] font-bold uppercase tracking-wider ${iconColorCls}`}>
+                    <span className={`text-[12px] font-semibold   ${iconColorCls}`}>
                       {ext.substring(0, 3)}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0 pr-4">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-[13px] text-foreground/90 dark:text-white/92 font-medium truncate" title={op.originalName}>
+                      <span className="text-[14px] text-foreground dark:text-foreground font-medium truncate" title={op.originalName}>
                         {op.originalName}
                       </span>
                     </div>
@@ -486,19 +434,24 @@ function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; o
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12px] text-muted-foreground dark:text-white/30 truncate" title="No rename">No rename</span>
+                        <span className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] truncate" title="No rename">No rename</span>
                       </div>
                     )}
                   </div>
 
                   <div className="shrink-0 flex items-center pl-2 ml-auto border-l-[0.5px] border-black/10 dark:border-white/[0.06]">
-                    <p className="text-[12px] text-muted-foreground dark:text-white/40 font-mono w-[180px] truncate text-right px-2" title={op.newPath.replace(metrics.destPath || '', '')}>
+                    <p className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] font-mono w-[180px] truncate text-right px-2" title={op.newPath.replace(metrics.destPath || '', '')}>
                       {op.newPath.replace(metrics.destPath || '', '')}
                     </p>
                   </div>
                 </div>
               );
             })}
+            {metrics.operations.length > RECAP_LIMIT && (
+              <p className="text-[12px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] text-center py-2">
+                And {(metrics.operations.length - RECAP_LIMIT).toLocaleString()} more. Open the Audit Log to see every file.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -506,15 +459,15 @@ function CompletionView({ metrics, onClose, runState }: { metrics: RunMetrics; o
   );
 }
 
-function BottomBar({ onClose, onConfirm, isRunning }: { onClose: () => void; onConfirm: () => void; isRunning: boolean }) {
+function BottomBar({ onClose, onConfirm, isRunning, empty }: { onClose: () => void; onConfirm: () => void; isRunning: boolean; empty: boolean }) {
   return (
     <div className="px-5 py-4 shrink-0 flex items-center justify-between bg-black/5 dark:bg-black/20 border-t-[0.5px] border-black/10 dark:border-white/[0.06]">
       <button onClick={onClose} disabled={isRunning}
-        className="px-4 py-2 rounded-lg text-[13px] text-muted-foreground dark:text-white/50 hover:text-foreground dark:hover:text-white/80 transition-colors disabled:opacity-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]">
+        className="px-4 py-2 rounded-lg text-[14px] text-muted-foreground dark:text-[var(--fluent-secondary-label)] hover:text-foreground dark:hover:text-foreground transition-colors disabled:opacity-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]">
         Cancel
       </button>
-      <button onClick={onConfirm} disabled={isRunning}
-        className="px-6 py-2.5 rounded-full bg-[var(--system-blue)] text-white text-[13px] font-bold hover:opacity-90 active:scale-95 transition-all shadow-[0_4px_12px_rgba(0,122,255,0.3)] disabled:opacity-20 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--system-blue)]">
+      <button onClick={onConfirm} disabled={isRunning || empty}
+        className="px-6 py-2.5 rounded-full bg-[var(--system-blue)] text-[var(--accent-text)] text-[14px] font-semibold hover:opacity-90 active:scale-95 transition-all shadow-[0_4px_12px_rgba(0,122,255,0.3)] disabled:opacity-20 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--system-blue)]">
         <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
         {isRunning ? "Running..." : "Confirm & Run"}
       </button>
@@ -528,6 +481,7 @@ export interface PreviewSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (sheetData?: { renames?: Record<string, { suggested: string, confidence: string }> }) => void;
+  onUndo: (operations: Operation[]) => Promise<boolean | undefined>;
   categories: Category[];
   runState: RunState;
   runMetrics: RunMetrics;
@@ -537,12 +491,10 @@ export interface PreviewSheetProps {
 }
 
 export function PreviewSheet({
-  isOpen, onClose, onConfirm, categories,
+  isOpen, onClose, onConfirm, onUndo, categories,
   runState, runMetrics, runProgress, files = [],
   smartRenameEnabled = false,
 }: PreviewSheetProps) {
-  const [keepOriginals, setKeepOriginals] = useState<Record<string, boolean>>({});
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [acceptedRenames, setAcceptedRenames] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -556,7 +508,7 @@ export function PreviewSheet({
   }, [files]);
 
   const enabledIds = useMemo(() => new Set(categories.filter(c => c.enabled).map(c => c.id)), [categories]);
-  const visibleFiles = useMemo(() => files.filter(f => enabledIds.has(f.category)), [files, enabledIds]);
+  const visibleFiles = useMemo(() => files.filter(f => enabledIds.has(f.categoryId ?? f.category)), [files, enabledIds]);
 
   const duplicateFiles = useMemo(() => visibleFiles.filter(f => f.isDuplicate), [visibleFiles]);
   const nonDuplicateFiles = useMemo(() => visibleFiles.filter(f => !f.isDuplicate), [visibleFiles]);
@@ -572,8 +524,6 @@ export function PreviewSheet({
   const isRunning = runState === "running";
   const isDone = runState === "completed" || runState === "error";
 
-  const toggleKeep = (id: string) => setKeepOriginals(p => ({ ...p, [id]: !p[id] }));
-  const handleOverride = (id: string, dest: string) => setOverrides(p => ({ ...p, [id]: dest }));
   const toggleAccept = (id: string) => setAcceptedRenames(p => ({ ...p, [id]: !p[id] }));
 
   const applyAll = () => {
@@ -591,8 +541,8 @@ export function PreviewSheet({
     const renamesToApply: Record<string, { suggested: string, confidence: string, subfolder?: string }> = {};
     files.forEach(f => {
       if (f.smartRename && acceptedRenames[f.id]) {
-        renamesToApply[f.name] = {
-          suggested: f.smartRename.suggested,
+        renamesToApply[f.relativePath ?? f.name] = {
+          suggested: smartRenameEnabled ? f.smartRename.suggested : f.name,
           confidence: f.smartRename.confidence || "high",
           subfolder: f.smartRename.subfolder
         };
@@ -602,36 +552,37 @@ export function PreviewSheet({
   };
 
   return (
-    <AnimatePresence>
+    <Dialog.Root open={isOpen} onOpenChange={open => { if (!open && !isRunning) onClose(); }}><AnimatePresence>
       {isOpen && (
-        <>
+        <Dialog.Portal forceMount>
+          <Dialog.Overlay asChild>
           <motion.div key="bd"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[55]"
             style={{ background: "rgba(0,0,0,0.36)" }}
-            onClick={!isRunning ? onClose : undefined}
           />
-
+          </Dialog.Overlay>
+          <Dialog.Content asChild onEscapeKeyDown={event => { if (isRunning) event.preventDefault(); }} onPointerDownOutside={event => { if (isRunning) event.preventDefault(); }}>
           <motion.div key="sh"
             initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }}
-            transition={{ duration: 0.28, ease: [0.32, 0, 0.16, 1] }}
+            transition={{ duration: 0.25, ease: [0, 0, 0, 1] }}
             role="dialog"
             aria-label="Preview Changes"
             aria-modal="true"
-            className="fixed top-0 right-0 bottom-0 z-[60] flex flex-col w-full md:w-[520px] lg:w-[600px] bg-background/80 backdrop-blur-3xl backdrop-saturate-150 border-l-[0.5px] border-black/10 dark:border-white/[0.08]"
+            className="fixed top-0 right-0 bottom-0 z-[60] flex flex-col w-full md:w-[520px] lg:w-[600px] bg-card backdrop-blur-3xl backdrop-saturate-150 border-l-[0.5px] border-black/10 dark:border-white/[0.08]"
             style={{
-              fontFamily: "var(--font-sf)",
+              fontFamily: "var(--font-ui)",
             }}
           >
             <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b-[0.5px] border-black/5 dark:border-white/[0.07]">
               <div>
-                <h2 className="text-[15px] font-semibold text-foreground/90 dark:text-white/82">Preview Changes</h2>
-                <p className="text-[12px] text-muted-foreground dark:text-white/40 mt-0.5">Review before organizing</p>
+                <Dialog.Title asChild><h2 className="text-[20px] font-semibold text-foreground">Preview Changes</h2></Dialog.Title>
+                <Dialog.Description asChild><p className="text-[12px] text-muted-foreground mt-0.5">Review before organizing</p></Dialog.Description>
               </div>
               <button onClick={onClose} disabled={isRunning}
                 aria-label="Close preview"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-foreground/50 dark:text-white/50 hover:text-foreground/80 dark:hover:text-white/80 hover:bg-black/5 dark:hover:bg-white/[0.08] transition-colors disabled:opacity-18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)]">
+                className="w-8 h-8 flex items-center justify-center rounded-full text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] hover:text-foreground dark:hover:text-foreground hover:bg-black/5 dark:hover:bg-white/[0.08] transition-colors disabled:opacity-18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)]">
                 <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
@@ -642,19 +593,21 @@ export function PreviewSheet({
             />
 
             {isDone ? (
-              <CompletionView metrics={runMetrics} onClose={onClose} runState={runState} />
+              <CompletionView metrics={runMetrics} onClose={onClose} runState={runState} onUndo={onUndo} />
             ) : (
               <>
                 {isRunning && <RunningMessage />}
                 <div className="flex-1 overflow-auto">
-                  <ColHeaders smartRenameEnabled={smartRenameEnabled} />
+                  {visibleFiles.length === 0 && <p role="status" className="px-5 py-8 text-[14px] text-muted-foreground">No files match your enabled rules and filters. Change the rules or choose another source folder.</p>}
+                  {files.length >= 50 && <p className="px-5 py-3 text-[14px] text-muted-foreground">Preview shows the first 50 matching files. This run will process all matching files in the source folder; AI suggestions apply only to the files shown.</p>}
+                  <ColHeaders />
 
-                  {smartRenameEnabled && (
+                  {visibleFiles.some(file => file.smartRename) && (
                     <BulkRenameBar
                       files={visibleFiles}
-                      acceptedRenames={acceptedRenames}
                       onApplyAll={applyAll}
                       onRevertAll={revertAll}
+                      smartRenameEnabled={smartRenameEnabled}
                     />
                   )}
 
@@ -664,18 +617,16 @@ export function PreviewSheet({
                     {duplicateFiles.length > 0 && (
                       <div className="mb-4">
                         <div className="px-5 py-2 mt-2 bg-[var(--system-red)]/10 border-y border-[var(--system-red)]/20 flex items-center justify-between">
-                          <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--system-red)] flex items-center gap-1.5">
+                          <span className="text-[12px] font-semibold text-[var(--system-red)] flex items-center gap-1.5">
                             <Copy className="w-3.5 h-3.5" />
                             Exact Duplicates ({duplicateFiles.length})
                           </span>
-                          <span className="text-[11px] text-[var(--system-red)]/80">Byte-for-byte exact copies</span>
+                          <span className="text-[12px] text-[var(--system-red)]">Matching full-file hashes</span>
                         </div>
                         <div className="divide-y divide-white/[0.04]">
                           {duplicateFiles.map((file) => (
                             <FileRow
                               key={file.id} file={file}
-                              keepOriginal={!!keepOriginals[file.id]}
-                              onToggleKeep={() => toggleKeep(file.id)}
                               smartRenameEnabled={false}
                               dimmed={isRunning}
                               categoryConfig={categories.find(c => c.name.toLowerCase() === file.category.toLowerCase())}
@@ -688,18 +639,16 @@ export function PreviewSheet({
                     {reviewFiles.length > 0 && (
                       <div className="mb-4">
                         <div className="px-5 py-2 mt-2 bg-[var(--system-orange)]/10 border-y border-[var(--system-orange)]/20 flex items-center justify-between">
-                          <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--system-orange)] flex items-center gap-1.5">
+                          <span className="text-[12px] font-semibold text-[var(--system-orange)] flex items-center gap-1.5">
                             <AlertTriangle className="w-3.5 h-3.5" />
                             Review Required ({reviewFiles.length})
                           </span>
-                          <span className="text-[11px] text-[var(--system-orange)]/80">Check AI suggestions below</span>
+                          <span className="text-[12px] text-[var(--system-orange)]">Check AI suggestions below</span>
                         </div>
                         <div className="divide-y divide-white/[0.04]">
                           {reviewFiles.map((file) => (
                             <FileRow
                               key={file.id} file={file}
-                              keepOriginal={!!keepOriginals[file.id]}
-                              onToggleKeep={() => toggleKeep(file.id)}
                               smartRenameEnabled={smartRenameEnabled}
                               accepted={acceptedRenames[file.id]}
                               onToggleAccept={toggleAccept}
@@ -715,7 +664,7 @@ export function PreviewSheet({
                       <div>
                         {reviewFiles.length > 0 && (
                           <div className="px-5 py-2 bg-white/[0.02] border-y border-white/[0.04]">
-                            <span className="text-[12px] font-bold uppercase tracking-wider text-white/40">
+                            <span className="text-[12px] font-semibold text-foreground">
                               Ready to Organize ({regularFiles.length})
                             </span>
                           </div>
@@ -724,8 +673,6 @@ export function PreviewSheet({
                           {regularFiles.map((file) => (
                             <FileRow
                               key={file.id} file={file}
-                              keepOriginal={!!keepOriginals[file.id]}
-                              onToggleKeep={() => toggleKeep(file.id)}
                               smartRenameEnabled={smartRenameEnabled}
                               accepted={acceptedRenames[file.id]}
                               onToggleAccept={toggleAccept}
@@ -743,12 +690,14 @@ export function PreviewSheet({
                   onClose={onClose}
                   onConfirm={confirmAndRun}
                   isRunning={isRunning}
+                  empty={visibleFiles.length === 0}
                 />
               </>
             )}
           </motion.div>
-        </>
+          </Dialog.Content>
+        </Dialog.Portal>
       )}
-    </AnimatePresence>
+    </AnimatePresence></Dialog.Root>
   );
 }

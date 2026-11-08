@@ -11,42 +11,49 @@ export interface SelectOption<T extends string = string> {
   label: string;
 }
 
-interface MacSelectProps<T extends string> {
+interface FluentSelectProps<T extends string> {
   label: string;
   value: T;
   onChange: (value: T) => void;
   options: readonly SelectOption<T>[];
   placeholder?: string;
+  /** Unique id when several selects share a label. Defaults to one from the label. */
+  id?: string;
+  /** Optional help text below the field. */
+  description?: string;
 }
 
 /**
- * A labelled dropdown styled as a flat macOS pop-up button.
+ * A labelled dropdown styled per Windows 11 Fluent design specifications.
  *
  * Generic over the option value so callers keep their union type end to end
  * (`"any" | "today" | …`) instead of casting a bare `string` back at the
  * change handler.
  */
-export function MacSelect<T extends string>({
+export function FluentSelect<T extends string>({
   label,
   value,
   onChange,
   options,
   placeholder,
-}: MacSelectProps<T>) {
-  const selectId = `mac-select-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  id,
+  description,
+}: FluentSelectProps<T>) {
+  const selectId = id ?? `fluent-select-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
   return (
     <div className="flex flex-col gap-1.5 flex-1 select-none">
       <label
         htmlFor={selectId}
-        className="text-[13px] font-medium text-foreground/50 dark:text-white/40 tracking-tight"
+        className="text-[14px] font-medium text-[var(--fluent-secondary-label)] dark:text-[var(--fluent-secondary-label)] tracking-tight"
       >
         {label}
       </label>
       <Select value={value} onValueChange={(next) => onChange(next as T)}>
         <SelectTrigger
           id={selectId}
-          className="w-full bg-black/5 dark:bg-white/[0.05] border-[0.5px] border-black/10 dark:border-white/10 text-[14px] h-9 px-3 hover:bg-black/10 dark:hover:bg-white/[0.08] transition-colors"
+          aria-describedby={description ? `${selectId}-description` : undefined}
+          className="w-full bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/10 text-[14px] h-9 px-3 hover:bg-black/10 dark:hover:bg-white/[0.08] transition-colors"
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
@@ -62,6 +69,9 @@ export function MacSelect<T extends string>({
           ))}
         </SelectContent>
       </Select>
+      {description && (
+        <p id={`${selectId}-description`} className="text-[12px] text-[var(--fluent-secondary-label)]">{description}</p>
+      )}
     </div>
   );
 }

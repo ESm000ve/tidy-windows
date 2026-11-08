@@ -19,17 +19,17 @@ export function NoticeDialog({ open, onOpenChange, message }: NoticeDialogProps)
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <AlertDialog.Content
-          className="fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2 w-full max-w-sm rounded-[14px] bg-background/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl p-6 text-center focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
-          style={{ fontFamily: "var(--font-sf)" }}
+          className="fluent-notice fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2 w-full max-w-sm rounded-lg bg-background/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl p-6 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+          style={{ fontFamily: "var(--font-ui)" }}
         >
-          <AlertDialog.Title className="text-[15px] font-bold text-foreground dark:text-white mb-2">
+          <AlertDialog.Title className="text-[15px] font-semibold text-foreground dark:text-white mb-2">
             Notice
           </AlertDialog.Title>
-          <AlertDialog.Description className="text-[13px] text-foreground/70 dark:text-white/70 mb-6 leading-relaxed">
+          <AlertDialog.Description className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-foreground mb-6 leading-relaxed">
             {message}
           </AlertDialog.Description>
           <AlertDialog.Action asChild>
-            <button className="w-full h-9 flex items-center justify-center rounded-[8px] bg-[var(--system-blue)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mac-focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background">
+            <button className="fluent-primary h-9 flex items-center justify-center rounded-[8px] bg-[var(--system-blue)] text-[var(--accent-text)] text-[14px] font-semibold hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fluent-focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background">
               OK
             </button>
           </AlertDialog.Action>

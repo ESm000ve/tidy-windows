@@ -5,9 +5,11 @@
  * parser) changes anything. Nothing here depends on runtime state, so it lives
  * outside the component tree.
  */
-import type { Category } from "./lib/generateScript";
+import type { Category } from "./types";
+import { EBOOK_EXTENSIONS } from "../shared/ebookFormats";
 import {
   Archive,
+  Book,
   Document,
   Film,
   MusicList,
@@ -18,6 +20,7 @@ import {
 /** Identifiers of the categories Tidy ships with. */
 export const BUILT_IN_CATEGORY_IDS = [
   "documents",
+  "books",
   "images",
   "audio",
   "video",
@@ -32,6 +35,7 @@ export type BuiltInCategoryId = (typeof BUILT_IN_CATEGORY_IDS)[number];
  */
 export const AVAILABLE_EXTENSIONS: Record<BuiltInCategoryId, string[]> = {
   documents: ["pdf", "docx", "txt", "xlsx", "pptx", "pages", "numbers", "key", "csv", "md", "rtf", "odt"],
+  books: [...EBOOK_EXTENSIONS],
   images: ["jpg", "jpeg", "png", "gif", "svg", "tiff", "raw", "heic", "webp", "bmp", "ico", "psd"],
   audio: ["mp3", "wav", "aac", "flac", "ogg", "m4a", "wma", "alac", "aiff"],
   video: ["mp4", "mov", "avi", "mkv", "webm", "flv", "wmv", "m4v", "mpg", "3gp"],
@@ -40,6 +44,7 @@ export const AVAILABLE_EXTENSIONS: Record<BuiltInCategoryId, string[]> = {
 
 export const CATEGORY_ICONS: Record<string, Icon> = {
   documents: Document,
+  books: Book,
   images: PhotoFill,
   audio: MusicList,
   video: Film,
@@ -48,6 +53,7 @@ export const CATEGORY_ICONS: Record<string, Icon> = {
 
 export const CATEGORY_COLORS: Record<string, string> = {
   documents: "blue",
+  books: "blue",
   images: "purple",
   audio: "orange",
   video: "green",
@@ -60,6 +66,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
  */
 export const SMART_SUBFOLDERS: Record<string, string[]> = {
   documents: ["Invoices", "Receipts", "Contracts", "Reports", "Presentations", "Other"],
+  books: ["Fiction", "Nonfiction", "Comics", "Reference", "Other"],
   images: ["Screenshots", "Photos", "Scans", "Designs", "Other"],
   audio: ["Music", "Podcasts", "Voice Memos", "Sound Effects", "Other"],
   video: ["Recordings", "Movies", "Clips", "Tutorials", "Other"],
@@ -68,6 +75,7 @@ export const SMART_SUBFOLDERS: Record<string, string[]> = {
 
 const CATEGORY_LABELS: Record<BuiltInCategoryId, string> = {
   documents: "Documents",
+  books: "Books",
   images: "Images",
   audio: "Audio",
   video: "Video",
@@ -88,16 +96,24 @@ export function createInitialCategories(): Category[] {
 }
 
 /**
- * Recessed "vibrancy tile" surface, per the macOS system-utility material:
+ * Windows 11 Fluent surface token:
  * a flat fill with a hairline inside stroke and no shadow, so cards sit flush
  * against the window background instead of floating above it.
  */
-export const GLASS_SURFACE =
-  "rounded-xl bg-black/5 dark:bg-white/[0.08] border-[0.5px] border-black/10 dark:border-white/10";
+export const GLASS_SURFACE = "fluent-surface";
 
 /** localStorage keys. Namespaced so they don't collide with anything else. */
 export const STORAGE_KEYS = {
+  includeSubfolders: "tidy_include_subfolders",
+  namingStyle: "tidy_naming_style",
   metrics: "tidy_metrics",
   sourcePath: "tidy_source_path",
   destPath: "tidy_dest_path",
+  categories: "tidy_categories",
+  filters: "tidy_filters",
+  conflictResolution: "tidy_conflict_resolution",
+  smartRename: "tidy_smart_rename",
+  schedule: "tidy_schedule",
+  ruleSets: "tidy_rule_sets",
+  watch: "tidy_watch_source",
 } as const;

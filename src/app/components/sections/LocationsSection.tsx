@@ -1,9 +1,18 @@
+import { SourceChoices } from "./SourceChoices";
 import { AnimatePresence, motion } from "motion/react";
+import { FluentToggle } from "../controls/FluentToggle";
 import { FolderCard } from "../FolderCard";
 import { ArrowRight, Folder, FolderFill } from "../icons";
 
 interface LocationsSectionProps {
+  selectedSourceFolders: string[] | null;
+  selectedFileExtensions: string[] | null;
+  fileExtensions: string[];
+  excludeHidden: boolean;
+  onSelectionChange: (folders: string[] | null, types: string[] | null) => void;
   sourcePath: string;
+  includeSubfolders: boolean;
+  onIncludeSubfoldersChange: (include: boolean) => void;
   destPath: string;
   onSourceChange: (path: string) => void;
   onDestChange: (path: string) => void;
@@ -13,7 +22,10 @@ interface LocationsSectionProps {
 
 /** Source and destination pickers, plus a summary pill once both are set. */
 export function LocationsSection({
+  selectedSourceFolders, selectedFileExtensions, fileExtensions, excludeHidden, onSelectionChange,
   sourcePath,
+  includeSubfolders,
+  onIncludeSubfoldersChange,
   destPath,
   onSourceChange,
   onDestChange,
@@ -27,7 +39,7 @@ export function LocationsSection({
   return (
     <section aria-label="Locations" className="flex flex-col gap-3">
       <div className="flex items-center justify-between pl-1">
-        <h2 className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground/60">
+        <h2 className="text-[20px] font-semibold text-foreground">
           Locations
         </h2>
       </div>
@@ -49,6 +61,16 @@ export function LocationsSection({
         />
       </div>
 
+      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
+        <div>
+          <label htmlFor="include-subfolders" id="include-subfolders-label" className="text-[14px] font-medium">Include subfolders</label>
+          <p id="include-subfolders-description" className="text-[12px] text-muted-foreground mt-1">Choose which folders to search below. Leave the original folders in place.</p>
+        </div>
+        <FluentToggle id="include-subfolders" checked={includeSubfolders} onCheckedChange={onIncludeSubfoldersChange} aria-labelledby="include-subfolders-label" aria-describedby="include-subfolders-description" />
+      </div>
+
+      {sourcePath && includeSubfolders && <SourceChoices sourcePath={sourcePath} destPath={destPath} includeSubfolders={includeSubfolders} excludeHidden={excludeHidden} fileExtensions={fileExtensions} selectedSourceFolders={selectedSourceFolders} selectedFileExtensions={selectedFileExtensions} onSelectionChange={onSelectionChange} />}
+
       <AnimatePresence>
         {sourcePath && destPath && (
           <motion.div
@@ -59,7 +81,7 @@ export function LocationsSection({
             className="overflow-hidden"
           >
             <div
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/[0.05] border-[0.5px] border-black/10 dark:border-white/10"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-black/5 dark:bg-white/[0.05] border border-black/10 dark:border-white/10"
               role="status"
               aria-live="polite"
               aria-label={`Source: ${sourcePath}, Destination: ${destPath}`}
@@ -71,15 +93,15 @@ export function LocationsSection({
                 >
                   <FolderFill className="w-3 h-3 text-[var(--system-blue)]" />
                 </div>
-                <span className="text-[13px] text-foreground/75 dark:text-white/70 truncate">
+                <span className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-foreground truncate">
                   {sourcePath}
                 </span>
               </div>
 
-              <ArrowRight className="w-3.5 h-3.5 text-foreground/40 shrink-0" aria-hidden="true" />
+              <ArrowRight className="w-3.5 h-3.5 text-[var(--fluent-secondary-label)] shrink-0" aria-hidden="true" />
 
               <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
-                <span className="text-[13px] text-foreground/75 dark:text-white/70 truncate text-right">
+                <span className="text-[14px] text-[var(--fluent-secondary-label)] dark:text-foreground truncate text-right">
                   {destPath}
                 </span>
                 <div
