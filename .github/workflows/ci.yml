@@ -22,7 +22,7 @@ jobs:
       - run: npm run verify
       - run: npm run check:publish -- --history --build
       - run: node scripts/prepare-windows.mjs
-      - run: npx electron-builder --win nsis --x64
+      - run: npx electron-builder --win nsis --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: Tidy-Windows
