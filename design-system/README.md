@@ -1,15 +1,30 @@
 # Tidy / Windows design system
 
-An editable library and portfolio reference for Tidy's Windows app. System version **1.0.0** documents app version **1.0.1**. Created November 2026.
+An editable Figma library and implementation reference for Tidy's Windows app. System version **1.0.0** records the app **1.0.1** design baseline. Created November 2026; the [current product case study](../docs/CASE-STUDY.md) covers the later app behavior.
+
+**[Open the Tidy design system in Figma →](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1)**
+
+[![Tidy Windows design-system overview](exports/cover.png)](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1)
 
 ## Start here
 
-- Open **index.html** for the visual reference, live control specimens, and a simulated review → preview → confirm → Undo walkthrough. It works locally without installation or an API key.
-- [Open the editable Figma library](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3).
-- Read **DESIGN-SYSTEM.md** for the full behavior and quality contract.
-- Use **PORTFOLIO-CASE-STUDY.md** as a factual case-study draft and edit it to reflect your own contribution.
-- Download **design-tokens.json**, **tokens.css**, and **component-inventory.json** for the implementation mapping.
-- **exports/** contains presentation PNGs exported from the Figma pages. Images are flattened presentation assets; the Figma components remain editable.
+- Download or clone the repository and open [index.html](index.html) locally for the visual reference, live controls, and a simulated review → preview → confirm → Undo walkthrough. It needs no installation or API key. GitHub shows the HTML source rather than running the reference.
+- Read [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) for the behavior and quality contract.
+- Read the [current product case study](../docs/CASE-STUDY.md) or the [design-system case study](PORTFOLIO-CASE-STUDY.md) for rationale and trade-offs.
+- Inspect [design-tokens.json](design-tokens.json), [tokens.css](tokens.css), and [component-inventory.json](component-inventory.json) for the implementation mapping.
+- Browse [exports/](exports/) for presentation PNGs. Images are flattened presentation assets; the Figma components remain editable.
+
+## Explore the Figma pages
+
+| Page | Figma | GitHub preview |
+| --- | --- | --- |
+| Start here | [Open overview](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1) | [Cover](exports/cover.png) |
+| Foundations | [Open foundations](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-2) | [Colors, typography, and tokens](exports/foundations.png) |
+| Buttons & fields | [Open controls](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-3) | [Component states](exports/components.png) |
+| Selection & status | [Open selection](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-4) | [Selection and feedback](exports/selection.png) |
+| Workflow patterns | [Open patterns](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-5) | [Scope, review, and recovery](exports/patterns.png) |
+| Accessibility & governance | [Open guidance](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-6) | [Accessibility](exports/accessibility.png) |
+| Portfolio story | [Open story](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=2-7) | [Portfolio board](exports/portfolio.png) |
 
 ## What is in v1
 

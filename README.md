@@ -6,7 +6,7 @@ A Windows desktop app that helps people organize files with visible rules, a pre
 
 ![Tidy's light theme: folder selection, filters, and automated file rules](docs/screenshots/home-light.png)
 
-[Design case study](docs/CASE-STUDY.md) · [Design system](design-system/README.md) · [Windows guide](docs/WINDOWS.md) · [Development](#run-locally)
+[Design case study](docs/CASE-STUDY.md) · [Design system](design-system/README.md) · [Figma library](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1) · [Windows guide](docs/WINDOWS.md) · [Development](#run-locally)
 
 **[Download Tidy for Windows](https://github.com/ESm000ve/tidy-windows/releases/latest)** — Windows 11 x64. The installer is unsigned. Core organization works without an API key; add your own Gemini key in Settings for optional AI features.
 
@@ -30,6 +30,25 @@ Tidying a Downloads folder should feel predictable. Automation can save repetiti
 | Follow Windows conventions | Familiar menus, shortcuts, Segoe typography, Fluent icons, and light/dark themes. |
 
 Read the [case study](docs/CASE-STUDY.md) for context, contribution, trade-offs, evidence, and proposed user research.
+
+## Design system: from foundations to workflow
+
+The design system connects Tidy's visual language to the decisions people make while organizing files. It includes semantic light/dark colors, typography, reusable controls, and patterns for scope, AI review, preview, and recovery.
+
+**[Explore the editable Figma library →](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1)**
+
+[![Tidy design-system cover: foundations, components, and workflow patterns](design-system/exports/cover.png)](https://www.figma.com/design/bgHq8hu5Ik7fiSx3pUi4v3?node-id=0-1)
+
+The library has **7 pages, 11 component families, and 49 variants**, with light/dark color variables, dimensional tokens, text styles, and Fluent icon components. Figma specimens use a documented Inter fallback; the Windows app uses Segoe UI.
+
+| Explore | Included in this repository |
+| --- | --- |
+| [Design-system guide](design-system/README.md) | Library overview, Figma page links, and the local interactive reference. |
+| [Foundations](design-system/exports/foundations.png) · [Components](design-system/exports/components.png) · [Workflow patterns](design-system/exports/patterns.png) | Presentation boards exported from Figma, viewable directly on GitHub. |
+| [Tokens](design-system/design-tokens.json) · [CSS variables](design-system/tokens.css) · [Component inventory](design-system/component-inventory.json) | Inspectable foundations and implementation mapping. |
+| [System specification](design-system/DESIGN-SYSTEM.md) · [Validation](design-system/VALIDATION.md) | Behavior contracts, accessibility evidence, and documented limits. |
+
+The design-system v1 materials record the original app 1.0.1 baseline. The [current case study](docs/CASE-STUDY.md) and [Windows guide](docs/WINDOWS.md) describe the later product behavior.
 
 ## A closer look
 
